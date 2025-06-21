@@ -1,6 +1,52 @@
 # Quotient CUDA Server Deployment Guide
 
-This guide covers deploying the slimmed-down Quotient system on a CUDA-enabled server.
+## Prerequisites
+
+- Ubuntu 20.04+ with NVIDIA GPU
+- CUDA 11.8+ installed
+- Git installed
+- Internet connection
+
+## Setup Steps
+
+### 1. Install and Initialize Conda
+
+```bash
+# Download Miniconda
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+
+# Install Miniconda (follow prompts, accept defaults)
+bash Miniconda3-latest-Linux-x86_64.sh
+
+# Reload shell or source bashrc
+source ~/.bashrc
+
+# Initialize conda for current shell
+conda init bash
+
+# Reload shell again
+source ~/.bashrc
+
+# Verify conda installation
+conda --version
+```
+
+### 2. Install System Dependencies
+
+```bash
+# Update package list
+sudo apt update
+
+# Install required system packages
+sudo apt install -y git wget curl build-essential
+
+# Install Tesseract OCR
+sudo apt install -y tesseract-ocr tesseract-ocr-eng
+
+# Install NVIDIA drivers (if not already installed)
+# Check if drivers are installed: nvidia-smi
+# If not: sudo apt install nvidia-driver-535
+```
 
 ## System Requirements
 
@@ -60,56 +106,33 @@ conda activate quotient
 # pip install transformers accelerate bitsandbytes PyPDF2 pdfplumber
 ```
 
-### 4. Configure Environment
+### 4. Environment Configuration
 
 ```bash
 # Copy environment template
 cp env.example .env
 
-# Edit configuration
+# Edit .env file with your settings
 nano .env
+
+# Required settings:
+# HUGGINGFACE_TOKEN=your_token_here
+# MODEL_NAME=meta-llama/Llama-2-7b-chat-hf
+# MAX_MEMORY_GB=8
+# USE_4BIT=true
 ```
 
-Add these settings to `.env`:
-```env
-# Hugging Face Configuration (Required for Llama models)
-HUGGINGFACE_TOKEN=hf_your_token_here
-
-# LLM Configuration
-LLAMA_MODEL=meta-llama/Llama-2-7b-chat-hf
-USE_CUDA=true
-USE_MPS=false
-MAX_MEMORY_GB=16
-
-# Optional: Use a different model
-# LLAMA_MODEL=microsoft/DialoGPT-medium  # Smaller, faster, no token needed
-# LLAMA_MODEL=meta-llama/Llama-3-8b-instruct  # Better quality
-```
-
-**Important**: You need to:
-1. Get a Hugging Face token from [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-2. Request access to Llama models at [https://huggingface.co/meta-llama/Llama-2-7b-chat-hf](https://huggingface.co/meta-llama/Llama-2-7b-chat-hf)
-3. See `HUGGINGFACE_SETUP.md` for detailed instructions
-
-## Testing
-
-### 1. Test Hardware Detection
+### 5. Test Installation
 
 ```bash
-python test_slimmed.py
-```
+# Test basic functionality
+python test_basic.py
 
-### 2. Test with Sample Data
+# Test hardware detection
+python test_hardware.py
 
-```bash
-# Test with image
-python example.py data/sample_receipt.jpg
-
-# Test with spreadsheet
-python example.py data/sample_inventory.xlsx
-
-# Test with PDF
-python example.py data/sample_invoice.pdf
+# Test with sample data
+python example.py
 ```
 
 ## Performance Optimization
