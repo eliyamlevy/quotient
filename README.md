@@ -248,11 +248,13 @@ print_hardware_info()
 - Secure file handling
 - Environment-based configuration
 
-## 📚 Documentation
+## �� Documentation
 
-- [Deployment Guide](DEPLOYMENT_GUIDE.md) - Complete Ubuntu deployment instructions
-- [API Reference](docs/api.md) - Detailed API documentation
-- [Hardware Optimization](docs/hardware.md) - Performance tuning guide
+- [Architecture Plan](docs/ARCHITECTURE_PLAN.md)
+- [Deployment Guide](docs/DEPLOYMENT_GUIDE.md)
+- [CUDA Deployment Guide](docs/DEPLOYMENT_CUDA.md)
+- [Hugging Face Setup](docs/HUGGINGFACE_SETUP.md)
+- [Project TODOs](docs/TODOS.md)
 
 ## 🤝 Contributing
 
