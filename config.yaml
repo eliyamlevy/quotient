@@ -3,15 +3,15 @@
 # Edit as needed and restart the API server to apply changes.
 
 # Hugging Face Configuration (Required for Llama models)
-huggingface_token: "your_huggingface_token_here"  # Get from https://huggingface.co/settings/tokens
+# huggingface_token: "your_huggingface_token_here"  # Get from https://huggingface.co/settings/tokens
 
 # Local LLM Configuration
-llm_backend: "openchat"
-llm_id: "openchat/openchat-3.5-0106-Q4_K_M"  # OpenChat3.5 Q4_K_M quantized model
+llm_backend: "llama"
+# llm_id: "openchat/openchat-3.5-0106-Q4_K_M"  # Commented out - using GGUF instead
 
 # GGUF Model Configuration (Alternative to HuggingFace models)
-# Uncomment and set the path to your local .gguf model file
-# gguf_model_path: "models/llama-2-7b-chat.Q4_K_M.gguf"
+# Update this path to where your downloaded GGUF file is located
+gguf_model_path: "openchat_3.5.Q4_K_M.gguf"
 
 # Hardware Optimization
 use_cuda: true        # Set to true to use CUDA (NVIDIA GPU)

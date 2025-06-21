@@ -106,6 +106,71 @@ MAX_FILE_SIZE_MB=100
 OUTPUT_DIR=output
 ```
 
+## 🤖 Model Management
+
+Quotient supports both local GGUF models and remote HuggingFace models with intelligent fallback:
+
+### Local GGUF Models (Recommended)
+For offline operation and better performance, use local GGUF model files:
+
+```yaml
+# config.yaml
+llm_backend: "llama"
+gguf_model_path: "models/openchat_3.5.Q4_K_M.gguf"
+```
+
+**Download a GGUF Model:**
+```bash
+# Download OpenChat 3.5 (recommended)
+python scripts/download_gguf_model.py TheBloke/openchat_3.5-GGUF
+
+# Download Llama-2-7B-Chat
+python scripts/download_gguf_model.py TheBloke/Llama-2-7B-Chat-GGUF
+```
+
+### Remote HuggingFace Models
+For online operation with HuggingFace models:
+
+```yaml
+# config.yaml
+llm_backend: "llama"
+llm_id: "openchat/openchat-3.5-0106-Q4_K_M"
+huggingface_token: "your_token_here"
+```
+
+### Model Validation
+Test your model configuration:
+
+```bash
+# Test model manager
+python scripts/test_model_manager.py
+
+# Test GGUF model specifically
+python scripts/test_gguf.py
+```
+
+### Model Status Endpoint
+Check model status via API:
+
+```bash
+curl http://localhost:8000/model-info
+```
+
+**Response:**
+```json
+{
+  "model_configuration": {
+    "backend": "llama",
+    "local_model": {
+      "path": "models/openchat_3.5.Q4_K_M.gguf",
+      "exists": true
+    },
+    "status": "local"
+  },
+  "pipeline_ready": true
+}
+```
+
 ## 🧪 Testing
 
 ### Hardware Detection Test

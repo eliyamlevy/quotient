@@ -31,6 +31,7 @@ from quotient.core.config import QuotientConfig
 from quotient.core.pipeline import QuotientPipeline
 from quotient.utils.data_models import InventoryItem
 from quotient.utils.hardware_utils import HardwareDetector
+from quotient.utils.model_manager import validate_model_config, ModelManager
 from quotient.babbage.preproc import PreprocPipeline
 
 # Configure logging
@@ -155,7 +156,24 @@ async def startup_event():
         logger.info("⚙️  Configuration:")
         config = QuotientConfig.from_yaml()
         logger.info(f"  LLM Backend: {config.llm_backend}")
-        logger.info(f"  Model: {config.llm_id}")
+        
+        # Validate model configuration
+        if not validate_model_config(config):
+            logger.error("❌ Model configuration validation failed")
+            logger.error("Please check your config.yaml and ensure a model is available")
+            raise RuntimeError("Model configuration validation failed")
+        
+        # Log model information
+        model_manager = ModelManager(config)
+        model_info = model_manager.get_model_info()
+        
+        if model_info['local_model']:
+            logger.info(f"  Local Model: {model_info['local_model']['path']}")
+            logger.info(f"  Local Model Status: {'✅ Available' if model_info['local_model']['exists'] else '❌ Missing'}")
+        elif model_info['remote_model']:
+            logger.info(f"  Remote Model: {model_info['remote_model']['id']}")
+            logger.info(f"  Token Configured: {'✅ Yes' if model_info['remote_model']['token_configured'] else '❌ No'}")
+        
         logger.info(f"  Use CUDA: {config.use_cuda}")
         logger.info(f"  Use MPS: {config.use_mps}")
         logger.info(f"  Max Memory: {config.max_memory_gb} GB")
@@ -233,6 +251,22 @@ async def get_statistics():
     return {
         "api_metrics": metrics.get_stats(),
         "model_info": metrics.model_info,
+        "current_time": datetime.now().isoformat()
+    }
+
+@app.get("/model-info")
+async def get_model_info():
+    """Get detailed model information and status."""
+    if not pipeline:
+        raise HTTPException(status_code=503, detail="Pipeline not initialized")
+    
+    config = QuotientConfig.from_yaml()
+    model_manager = ModelManager(config)
+    model_info = model_manager.get_model_info()
+    
+    return {
+        "model_configuration": model_info,
+        "pipeline_ready": pipeline is not None,
         "current_time": datetime.now().isoformat()
     }
 
