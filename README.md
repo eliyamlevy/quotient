@@ -10,6 +10,13 @@ Quotient is a sophisticated AI-powered inventory management system with a three-
 - **Hardware-Aware Optimization**: Automatic CUDA/MPS/CPU detection and optimization
 - **Data Normalization**: Standardized inventory item formatting
 
+### **Web API Service**
+- **RESTful API**: FastAPI-based web service for remote access
+- **File Upload Processing**: Direct file upload and processing
+- **Text Processing**: Process text content for inventory extraction
+- **Real-time Processing**: Background task processing with status updates
+- **Interactive Documentation**: Auto-generated API docs at `/docs`
+
 ### **Hardware Optimization**
 - **CUDA Support**: Optimized for NVIDIA GPUs with automatic memory management
 - **Apple Silicon Support**: MPS acceleration for Mac users
@@ -132,6 +139,73 @@ pipeline = QuotientPipeline(config)
 
 # Process documents
 results = pipeline.process_documents(["invoice.pdf", "inventory.xlsx"])
+```
+
+### Web API Usage
+
+#### Start the API Server
+```bash
+# Using the startup script (recommended)
+./start_api.sh
+
+# Or directly with Python
+python api.py
+```
+
+The API will be available at:
+- **API Server**: http://localhost:8000
+- **Interactive Docs**: http://localhost:8000/docs
+- **Health Check**: http://localhost:8000/health
+
+#### API Endpoints
+
+**Health Check**
+```bash
+curl http://localhost:8000/health
+```
+
+**Process Text**
+```bash
+curl -X POST "http://localhost:8000/process-text" \
+     -H "Content-Type: application/json" \
+     -d '{"text": "Item: Laptop, Quantity: 5, Price: $999", "max_items": 10}'
+```
+
+**Process File**
+```bash
+curl -X POST "http://localhost:8000/process-file" \
+     -F "file=@inventory.xlsx" \
+     -F "max_items=50"
+```
+
+**Get Supported Formats**
+```bash
+curl http://localhost:8000/supported-formats
+```
+
+#### Python Client Example
+```python
+from api_client_example import QuotientAPIClient
+
+# Create client
+client = QuotientAPIClient("http://localhost:8000")
+
+# Process text
+result = client.process_text("Item: Chair, Quantity: 10, Price: $299")
+print(f"Extracted {result['items_extracted']} items")
+
+# Process file
+result = client.process_file("data/sample_inventory.xlsx")
+print(f"Processed {result['filename']}")
+```
+
+#### Testing the API
+```bash
+# Run comprehensive API tests
+python test_api.py
+
+# Test specific endpoints
+python api_client_example.py
 ```
 
 ### Hardware Information

@@ -50,7 +50,7 @@ class Babbage:
             "successful_extractions": 0,
             "failed_extractions": 0
         }
-        
+    
         self.logger.info("Babbage Service initialized successfully")
     
     def process_documents(self, document_paths: List[Path]) -> ProcessingResult:
