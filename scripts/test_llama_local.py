@@ -47,7 +47,7 @@ def test_with_open_model():
             # Create configuration
             config = QuotientConfig()
             config.llm_backend = "llama"
-            config.llama_model = model_id
+            config.llm_id = model_id
             
             # Create entity extractor
             extractor = EntityExtractor(config)

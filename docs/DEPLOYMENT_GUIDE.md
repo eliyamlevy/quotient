@@ -77,8 +77,8 @@ Create a `.env` file in the project root:
 
 ```bash
 # LLM Configuration
-LLM_BACKEND=llama
-LLAMA_MODEL=meta-llama/Meta-Llama-3-8B-Instruct
+LLM_BACKEND=openchat
+LLM_ID=openchat/openchat-3.5-0106-Q4_K_M
 
 # Hardware Optimization
 USE_CUDA=true
@@ -94,16 +94,13 @@ OUTPUT_DIR=output
 ```
 
 ### 2. Model Download
-Download the Llama model (requires HuggingFace access):
+Download the OpenChat3.5 model (no token required):
 
 ```bash
-# Login to HuggingFace (required for Llama models)
-huggingface-cli login
-
 # Download model (this will take time and space)
 python -c "
 from transformers import AutoTokenizer, AutoModelForCausalLM
-model_id = 'meta-llama/Meta-Llama-3-8B-Instruct'
+model_id = 'openchat/openchat-3.5-0106-Q4_K_M'
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id)
 "
@@ -164,11 +161,11 @@ Adjust model size based on available memory:
 ```python
 # In your configuration
 if gpu_memory >= 24:
-    model_id = "meta-llama/Meta-Llama-3-70B-Instruct"  # Larger model
-elif gpu_memory >= 16:
-    model_id = "meta-llama/Meta-Llama-3-8B-Instruct"   # Medium model
+    model_id = "openchat/openchat-3.5-0106"  # Full precision model
+elif gpu_memory >= 8:
+    model_id = "openchat/openchat-3.5-0106-Q4_K_M"   # Quantized model
 else:
-    model_id = "meta-llama/Meta-Llama-3-1B-Instruct"   # Smaller model
+    model_id = "microsoft/DialoGPT-medium"   # Smaller model
 ```
 
 ### 3. Batch Processing
@@ -223,7 +220,7 @@ from quotient.babbage.processors.entity_extractor import EntityExtractor
 from quotient.core.config import QuotientConfig
 
 config = QuotientConfig()
-config.llm_backend = 'llama'
+config.llm_backend = 'openchat'
 
 extractor = EntityExtractor(config)
 

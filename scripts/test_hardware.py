@@ -102,10 +102,10 @@ def test_configuration():
         # Test Llama configuration
         config_llama = QuotientConfig.from_yaml()
         config_llama.llm_backend = "llama"
-        config_llama.llama_model = "meta-llama/Llama-2-7b-chat-hf"
+        config_llama.llm_id = "meta-llama/Llama-2-7b-chat-hf"
         
         print(f"Llama Config: {config_llama.llm_backend}")
-        print(f"Llama Model: {config_llama.llama_model}")
+        print(f"Llama Model: {config_llama.llm_id}")
         
         # Test hardware configuration
         hw_config = config_llama.get_hardware_config()

@@ -24,7 +24,9 @@ class QuotientConfig:
     huggingface_token: Optional[str] = None
     # Local LLM Configuration
     llm_backend: str = "llama"  # "llama" only
-    llama_model: str = "meta-llama/Llama-2-7b-chat-hf"
+    llm_id: str = "meta-llama/Llama-2-7b-chat-hf"
+    # GGUF Model Configuration (alternative to HuggingFace models)
+    gguf_model_path: Optional[str] = None  # Path to local .gguf model file
     # Hardware Optimization (CUDA focused)
     use_cuda: bool = True
     use_mps: bool = False
@@ -62,9 +64,18 @@ class QuotientConfig:
         if self.llm_backend != "llama":
             print(f"Error: Only llama backend is supported: {self.llm_backend}")
             return False
-        if self.llama_model.startswith("meta-llama/") and not self.huggingface_token:
+        
+        # Check if using GGUF model or HuggingFace model
+        if self.gguf_model_path:
+            if not os.path.exists(self.gguf_model_path):
+                print(f"Error: GGUF model file not found: {self.gguf_model_path}")
+                return False
+            if not self.gguf_model_path.endswith('.gguf'):
+                print(f"Warning: GGUF model path doesn't end with .gguf: {self.gguf_model_path}")
+        elif self.llm_id.startswith("meta-llama/") and not self.huggingface_token:
             print("Warning: Hugging Face token may be required for Llama models")
             print("Get your token from: https://huggingface.co/settings/tokens")
+        
         return True
 
     def is_ai_enabled(self) -> bool:
@@ -85,7 +96,8 @@ class QuotientConfig:
             "database_url": self.extra.get("database_url", "sqlite:///quotient.db"),
             "vector_db_path": self.extra.get("vector_db_path", "./vector_db"),
             "llm_backend": self.llm_backend,
-            "llama_model": self.llama_model,
+            "llm_id": self.llm_id,
+            "gguf_model_path": self.gguf_model_path,
             "use_cuda": self.use_cuda,
             "use_mps": self.use_mps,
             "max_memory_gb": self.max_memory_gb,

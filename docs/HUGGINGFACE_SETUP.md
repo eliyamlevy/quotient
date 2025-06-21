@@ -32,10 +32,11 @@ If you don't want to wait for Llama access, you can use these open models:
 
 ```bash
 # In your .env file, change to:
-LLAMA_MODEL=microsoft/DialoGPT-medium
+LLM_ID=openchat/openchat-3.5-0106-Q4_K_M
 ```
 
 Other good alternatives:
+- `openchat/openchat-3.5-0106-Q4_K_M` (7B parameters, quantized, excellent quality)
 - `microsoft/DialoGPT-medium` (345M parameters, fast)
 - `gpt2` (124M parameters, very fast)
 - `distilgpt2` (82M parameters, fastest)
@@ -56,7 +57,7 @@ nano .env
 Add your token:
 ```env
 HUGGINGFACE_TOKEN=hf_your_token_here
-LLAMA_MODEL=meta-llama/Llama-2-7b-chat-hf
+LLM_ID=openchat/openchat-3.5-0106-Q4_K_M
 USE_CUDA=true
 MAX_MEMORY_GB=16
 ```
@@ -87,6 +88,7 @@ python test_slimmed.py
 
 | Model | Size | Quality | Speed | Token Required | Memory |
 |-------|------|---------|-------|----------------|--------|
+| openchat/openchat-3.5-0106-Q4_K_M | 7B | Excellent | Fast | No | 4-6GB |
 | microsoft/DialoGPT-medium | 345M | Good | Fast | No | 2GB |
 | gpt2 | 124M | Basic | Very Fast | No | 1GB |
 | distilgpt2 | 82M | Basic | Fastest | No | 0.5GB |

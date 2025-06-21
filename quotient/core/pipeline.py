@@ -86,7 +86,7 @@ class QuotientPipeline:
             'layer3_data_completion': 'not_implemented',
             'config': {
                 'llm_backend': self.config.llm_backend,
-                'llama_model': self.config.llama_model,
+                'llm_id': self.config.llm_id,
                 'supported_formats': self.babbage.get_supported_formats()
             }
         }

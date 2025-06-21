@@ -6,8 +6,12 @@
 huggingface_token: "your_huggingface_token_here"  # Get from https://huggingface.co/settings/tokens
 
 # Local LLM Configuration
-llm_backend: "llama"  # Only 'llama' is supported
-llama_model: "meta-llama/Llama-2-7b-chat-hf"  # e.g. meta-llama/Llama-2-7b-chat-hf
+llm_backend: "openchat"
+llm_id: "openchat/openchat-3.5-0106-Q4_K_M"  # OpenChat3.5 Q4_K_M quantized model
+
+# GGUF Model Configuration (Alternative to HuggingFace models)
+# Uncomment and set the path to your local .gguf model file
+# gguf_model_path: "models/llama-2-7b-chat.Q4_K_M.gguf"
 
 # Hardware Optimization
 use_cuda: true        # Set to true to use CUDA (NVIDIA GPU)

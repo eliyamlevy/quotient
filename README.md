@@ -93,8 +93,8 @@ Create a `.env` file in the project root:
 
 ```bash
 # LLM Configuration
-LLM_BACKEND=llama  # or "openai"
-LLAMA_MODEL=meta-llama/Meta-Llama-3-8B-Instruct
+LLM_BACKEND=openchat
+LLM_ID=openchat/openchat-3.5-0106-Q4_K_M
 
 # Hardware Optimization
 USE_CUDA=true
@@ -248,7 +248,7 @@ print_hardware_info()
 - Secure file handling
 - Environment-based configuration
 
-## �� Documentation
+## 📄 Documentation
 
 - [Architecture Plan](docs/ARCHITECTURE_PLAN.md)
 - [Deployment Guide](docs/DEPLOYMENT_GUIDE.md)

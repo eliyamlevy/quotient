@@ -155,7 +155,7 @@ async def startup_event():
         logger.info("⚙️  Configuration:")
         config = QuotientConfig.from_yaml()
         logger.info(f"  LLM Backend: {config.llm_backend}")
-        logger.info(f"  Model: {config.llama_model}")
+        logger.info(f"  Model: {config.llm_id}")
         logger.info(f"  Use CUDA: {config.use_cuda}")
         logger.info(f"  Use MPS: {config.use_mps}")
         logger.info(f"  Max Memory: {config.max_memory_gb} GB")

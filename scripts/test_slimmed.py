@@ -33,7 +33,7 @@ def test_config():
         config = QuotientConfig.from_yaml()
         print(f"✅ Configuration loaded successfully")
         print(f"   LLM Backend: {config.llm_backend}")
-        print(f"   Model: {config.llama_model}")
+        print(f"   Model: {config.llm_id}")
         print(f"   CUDA: {config.use_cuda}")
         print(f"   MPS: {config.use_mps}")
         print(f"   Max Memory: {config.max_memory_gb}GB")
@@ -56,7 +56,7 @@ def test_pipeline():
         status = pipeline.get_processing_status()
         print(f"   Layer 1 (Babbage): {status['layer1_babbage']}")
         print(f"   LLM Backend: {status['config']['llm_backend']}")
-        print(f"   Model: {status['config']['llama_model']}")
+        print(f"   Model: {status['config']['llm_id']}")
         
     except Exception as e:
         print(f"❌ Pipeline initialization failed: {e}")

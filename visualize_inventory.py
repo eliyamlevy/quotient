@@ -292,7 +292,7 @@ def main():
     # Extract data using Babbage
     config = QuotientConfig()
     config.llm_backend = "llama"
-    config.llama_model = "microsoft/DialoGPT-medium"
+    config.llm_id = "microsoft/DialoGPT-medium"
     
     extractor = EntityExtractor(config)
     items = extractor.extract_inventory_items(test_text)

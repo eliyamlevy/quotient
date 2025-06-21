@@ -15,6 +15,13 @@ except ImportError:
     TORCH_AVAILABLE = False
     TRANSFORMERS_AVAILABLE = False
 
+# Optional imports for GGUF models
+try:
+    from llama_cpp import Llama
+    LLAMA_CPP_AVAILABLE = True
+except ImportError:
+    LLAMA_CPP_AVAILABLE = False
+
 from ...core.config import QuotientConfig
 from ...utils.data_models import InventoryItem, ItemStatus
 from ...utils.hardware_utils import HardwareDetector, get_optimal_device, get_model_config
@@ -36,26 +43,34 @@ class EntityExtractor:
         self.llm_backend = "llama"  # Only llama supported
         self.device = None
         self.llm_pipeline = None
+        self.gguf_model = None
         
-        if not TORCH_AVAILABLE:
-            self.logger.warning("PyTorch not available, AI features will be limited")
-            return
-        
-        if not TRANSFORMERS_AVAILABLE:
-            self.logger.warning("Transformers not available, AI features will be limited")
-            return
-        
-        self.device = get_optimal_device()
-        self._initialize_llama()
+        # Check for GGUF model first
+        if self.config.gguf_model_path:
+            if LLAMA_CPP_AVAILABLE:
+                self._initialize_gguf()
+            else:
+                self.logger.error("llama-cpp-python not available for GGUF models")
+                raise RuntimeError("llama-cpp-python required for GGUF models")
+        # Fall back to HuggingFace model
+        elif TORCH_AVAILABLE and TRANSFORMERS_AVAILABLE:
+            self.device = get_optimal_device()
+            self._initialize_llama()
+        else:
+            self.logger.error("No AI backend available - PyTorch/Transformers or llama-cpp-python required")
+            raise RuntimeError("No AI backend available")
     
     def _initialize_llama(self):
         """Initialize Llama model for local inference."""
         if not TORCH_AVAILABLE or not TRANSFORMERS_AVAILABLE:
-            self.logger.error("PyTorch or Transformers not available for Llama model")
-            return
+            raise RuntimeError("PyTorch or Transformers not available for LLM model")
             
         try:
-            model_id = getattr(self.config, 'llama_model', 'meta-llama/Llama-2-7b-chat-hf')
+            # Get the configured model ID - fail if not configured
+            if not hasattr(self.config, 'llm_id') or not self.config.llm_id:
+                raise ValueError("llm_id not configured in config.yaml")
+            
+            model_id = self.config.llm_id
             self.logger.info(f"Loading local LLM model: {model_id}")
             
             # Get hardware-optimized config for CUDA
@@ -101,8 +116,32 @@ class EntityExtractor:
             self.logger.info("Local LLM model loaded successfully")
             
         except Exception as e:
-            self.logger.error(f"Failed to load local LLM model: {str(e)}")
-            self.llm_pipeline = None
+            self.logger.error(f"Failed to load local LLM model '{model_id}': {str(e)}")
+            raise RuntimeError(f"Model initialization failed: {str(e)}")
+    
+    def _initialize_gguf(self):
+        """Initialize GGUF model for local inference."""
+        if not LLAMA_CPP_AVAILABLE:
+            raise RuntimeError("llama-cpp-python not available for GGUF model")
+            
+        try:
+            model_path = self.config.gguf_model_path
+            self.logger.info(f"Loading GGUF model: {model_path}")
+            
+            # Initialize GGUF model with optimized settings
+            self.gguf_model = Llama(
+                model_path=model_path,
+                n_ctx=2048,  # Context window
+                n_threads=4,  # CPU threads
+                n_gpu_layers=0,  # Set to >0 for GPU acceleration if available
+                verbose=False
+            )
+            
+            self.logger.info("GGUF model loaded successfully")
+            
+        except Exception as e:
+            self.logger.error(f"Failed to load GGUF model '{model_path}': {str(e)}")
+            raise RuntimeError(f"GGUF model initialization failed: {str(e)}")
     
     def extract_entities(self, text: str) -> List[Dict[str, Any]]:
         """Extract entities from text content.
@@ -116,14 +155,60 @@ class EntityExtractor:
         self.logger.info("Extracting entities from text")
         
         try:
-            if self.llm_pipeline:
+            if self.gguf_model:
+                return self._extract_with_gguf(text)
+            elif self.llm_pipeline:
                 return self._extract_with_llama(text)
             else:
-                self.logger.error("LLM pipeline not available - no fallback extraction available")
-                return []
+                raise RuntimeError("No LLM backend available - model initialization failed during startup")
                 
         except Exception as e:
             self.logger.error(f"Error extracting entities: {str(e)}")
+            raise
+    
+    def _extract_with_gguf(self, text: str) -> List[Dict[str, Any]]:
+        """Extract entities using local GGUF model.
+        
+        Args:
+            text: Text content
+            
+        Returns:
+            List of extracted entities
+        """
+        try:
+            prompt = self._create_extraction_prompt(text)
+            
+            # Generate response using GGUF model
+            result = self.gguf_model(
+                prompt,
+                max_tokens=512,
+                temperature=0.1,
+                top_p=0.9,
+                stop=["\n\n", "```"]
+            )
+            
+            generated_text = result['choices'][0]['text']
+            
+            # Extract JSON from response
+            json_start = generated_text.find('[')
+            json_end = generated_text.rfind(']') + 1
+            
+            if json_start != -1 and json_end != 0:
+                json_str = generated_text[json_start:json_end]
+                entities = json.loads(json_str)
+                
+                if isinstance(entities, list):
+                    self.logger.info(f"GGUF model extracted {len(entities)} entities")
+                    return entities
+                else:
+                    self.logger.warning("GGUF model response is not a list")
+                    return []
+            else:
+                self.logger.warning("No JSON array found in GGUF model response")
+                return []
+                
+        except Exception as e:
+            self.logger.error(f"GGUF extraction failed: {str(e)}")
             return []
     
     def _extract_with_llama(self, text: str) -> List[Dict[str, Any]]:
@@ -258,12 +343,26 @@ JSON:"""
 
     def prompt_llm(self, prompt: str) -> str:
         """Directly prompt the underlying LLM and return the raw response text."""
-        if not self.llm_pipeline:
-            self.logger.error("LLM pipeline not available for direct prompt.")
-            return "[ERROR] LLM pipeline not available."
-        try:
-            result = self.llm_pipeline(prompt)
-            return result[0]['generated_text']
-        except Exception as e:
-            self.logger.error(f"LLM prompt failed: {str(e)}")
-            return f"[ERROR] LLM prompt failed: {str(e)}" 
+        if self.gguf_model:
+            try:
+                result = self.gguf_model(
+                    prompt,
+                    max_tokens=512,
+                    temperature=0.1,
+                    top_p=0.9,
+                    stop=["\n\n", "```"]
+                )
+                return result['choices'][0]['text']
+            except Exception as e:
+                self.logger.error(f"GGUF prompt failed: {str(e)}")
+                return f"[ERROR] GGUF prompt failed: {str(e)}"
+        elif self.llm_pipeline:
+            try:
+                result = self.llm_pipeline(prompt)
+                return result[0]['generated_text']
+            except Exception as e:
+                self.logger.error(f"LLM prompt failed: {str(e)}")
+                return f"[ERROR] LLM prompt failed: {str(e)}"
+        else:
+            self.logger.error("No LLM backend available for direct prompt.")
+            return "[ERROR] No LLM backend available." 
