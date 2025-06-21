@@ -85,15 +85,45 @@ def test_process_text():
     """
     
     try:
+        # Test with preprocessing enabled
+        print("Testing text processing with preprocessing...")
         response = requests.post(
             f"{BASE_URL}/process-text",
-            json={"text": sample_text, "max_items": 10}
+            json={
+                "text": sample_text, 
+                "max_items": 10,
+                "use_preprocessing": True,
+                "return_preproc_results": True
+            }
         )
-        print(f"Text processing: {response.status_code}")
-        print(json.dumps(response.json(), indent=2))
+        print(f"Text processing (with preprocessing): {response.status_code}")
+        if response.status_code == 200:
+            result = response.json()
+            print(f"  Items extracted: {result.get('items_extracted')}")
+            print(f"  Preprocessing enabled: {result.get('use_preprocessing')}")
+            if 'preprocessing_results' in result:
+                print(f"  Preprocessing results available: {bool(result['preprocessing_results'])}")
+        
+        # Test without preprocessing
+        print("\nTesting text processing without preprocessing...")
+        response = requests.post(
+            f"{BASE_URL}/process-text",
+            json={
+                "text": sample_text, 
+                "max_items": 10,
+                "use_preprocessing": False,
+                "return_preproc_results": True
+            }
+        )
+        print(f"Text processing (without preprocessing): {response.status_code}")
+        if response.status_code == 200:
+            result = response.json()
+            print(f"  Items extracted: {result.get('items_extracted')}")
+            print(f"  Preprocessing enabled: {result.get('use_preprocessing')}")
+        
         return response.status_code == 200
     except requests.exceptions.ConnectionError:
-        print("❌ API server not running")
+        print("❌ API server not running. Start with: python api.py")
         return False
 
 def test_process_file():

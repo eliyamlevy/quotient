@@ -20,6 +20,7 @@ from .extractors.image_extractor import ImageExtractor
 from .extractors.spreadsheet_extractor import SpreadsheetExtractor
 from .processors.entity_extractor import EntityExtractor
 from .normalizers.data_normalizer import DataNormalizer
+from .preproc import PreprocPipeline
 
 
 class Babbage:
@@ -43,6 +44,9 @@ class Babbage:
         self.entity_extractor = EntityExtractor(config)
         self.data_normalizer = DataNormalizer(config)
         
+        # Initialize preprocessing pipeline (will be set up after entity_extractor is ready)
+        self.preproc = None
+        
         # Statistics
         self.stats = {
             "total_processed": 0,
@@ -52,6 +56,12 @@ class Babbage:
         }
     
         self.logger.info("Babbage Service initialized successfully")
+    
+    def _setup_preproc(self):
+        """Setup preprocessing pipeline with LLM prompt function."""
+        if self.preproc is None:
+            self.preproc = PreprocPipeline(llm_prompt_func=self.entity_extractor.prompt_llm)
+            self.logger.info("Preprocessing pipeline initialized")
     
     def process_documents(self, document_paths: List[Path]) -> ProcessingResult:
         """Process multiple documents and extract inventory information.
@@ -101,8 +111,25 @@ class Babbage:
                 result.add_error("No text content extracted from document")
                 return result
             
+            # Setup preprocessing pipeline if not already done
+            self._setup_preproc()
+            
+            # Preprocess text using the 3-layer pipeline
+            preproc_results = None
+            if self.preproc is not None:
+                try:
+                    preproc_results = self.preproc.run_pipeline(raw_text)
+                    preprocessed_text = preproc_results['layer3']  # Use final layer output
+                    self.logger.info("Text preprocessing completed successfully")
+                except Exception as e:
+                    self.logger.warning(f"Preprocessing failed, using original text: {str(e)}")
+                    preprocessed_text = raw_text
+            else:
+                self.logger.warning("Preprocessing pipeline not available, using original text")
+                preprocessed_text = raw_text
+            
             # Extract entities using AI
-            extracted_data = self.entity_extractor.extract_entities(raw_text)
+            extracted_data = self.entity_extractor.extract_entities(preprocessed_text)
             
             # Create inventory items
             items = self._create_inventory_items(extracted_data, str(file_path))
@@ -133,7 +160,12 @@ class Babbage:
                 "service": "babbage",
                 "extraction_method": self._get_extraction_method(file_path),
                 "text_length": len(result.raw_text) if result.raw_text else 0,
-                "items_extracted": len(result.items)
+                "items_extracted": len(result.items),
+                "preprocessing": {
+                    "enabled": self.preproc is not None,
+                    "results": preproc_results if preproc_results else None,
+                    "preprocessed_text_length": len(preprocessed_text) if 'preprocessed_text' in locals() else len(result.raw_text) if result.raw_text else 0
+                }
             }
         
         return result

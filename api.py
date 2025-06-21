@@ -117,6 +117,8 @@ metrics = APIMetrics()
 class TextProcessingRequest(BaseModel):
     text: str
     max_items: Optional[int] = 50
+    use_preprocessing: Optional[bool] = True  # Enable/disable preprocessing
+    return_preproc_results: Optional[bool] = False  # Include preprocessing results in response
 
 # Pydantic model for LLM prompt request
 class LLMPromptRequest(BaseModel):
@@ -419,10 +421,10 @@ async def process_text(request: TextProcessingRequest):
     Process text content and extract inventory items.
     
     Args:
-        request: TextProcessingRequest containing text and max_items
+        request: TextProcessingRequest containing text, max_items, and preprocessing options
     
     Returns:
-        JSON response with extracted inventory items
+        JSON response with extracted inventory items and optional preprocessing results
     """
     start_time = time.time()
     
@@ -431,6 +433,7 @@ async def process_text(request: TextProcessingRequest):
     
     try:
         logger.info(f"📝 Processing text input ({len(request.text)} characters)")
+        logger.info(f"🔧 Preprocessing enabled: {request.use_preprocessing}")
         
         # Create temporary text file
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as temp_file:
@@ -468,18 +471,26 @@ async def process_text(request: TextProcessingRequest):
         # Record metrics
         metrics.record_request("text", processing_time, success=True)
         
-        logger.info(f"✅ Successfully processed text input")
-        logger.info(f"   📊 Extracted {len(serialized_items)} items")
-        logger.info(f"   ⏱️  Processing time: {processing_time:.3f}s")
-        
-        return {
+        # Prepare response
+        response = {
             "success": True,
             "text_length": len(request.text),
             "items_extracted": len(serialized_items),
             "processing_time_seconds": round(processing_time, 3),
             "max_items_requested": request.max_items,
+            "use_preprocessing": request.use_preprocessing,
             "items": serialized_items
         }
+        
+        # Add preprocessing results if requested and available
+        if request.return_preproc_results and hasattr(result, 'layer1_result'):
+            response["preprocessing_results"] = result.layer1_result
+        
+        logger.info(f"✅ Successfully processed text input")
+        logger.info(f"   📊 Extracted {len(serialized_items)} items")
+        logger.info(f"   ⏱️  Processing time: {processing_time:.3f}s")
+        
+        return response
         
     except Exception as e:
         processing_time = time.time() - start_time
