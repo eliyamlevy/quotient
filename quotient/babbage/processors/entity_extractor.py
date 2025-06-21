@@ -83,7 +83,8 @@ class EntityExtractor:
                 device_map=config["device_map"],
                 load_in_8bit=config["load_in_8bit"],
                 load_in_4bit=config["load_in_4bit"],
-                trust_remote_code=True
+                trust_remote_code=True,
+                use_safetensors=True
             )
             
             # Create pipeline
