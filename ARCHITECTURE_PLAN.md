@@ -25,7 +25,7 @@ Quotient is an AI-powered inventory management system with a modular, three-laye
 
 ---
 
-## Layer 2: Analysis & Insights
+## Layer 2: Analysis & Insights ("Magellan")
 **Purpose:**
 - Aggregates and analyzes extracted inventory data
 - Provides insights, trends, and anomaly detection
@@ -39,11 +39,11 @@ Quotient is an AI-powered inventory management system with a modular, three-laye
 - [ ] Implement aggregation and summary statistics
 - [ ] Add trend analysis and anomaly detection modules
 - [ ] Build API for querying inventory insights
-- [ ] Integrate with Layer 1 output
+- [ ] Integrate with Layer 1 (Babbage) output
 
 ---
 
-## Layer 3: Interface & Integration
+## Layer 3: Interface & Integration ("Hopper")
 **Purpose:**
 - User-facing web dashboard and/or API
 - Visualization of inventory, trends, and analytics
@@ -63,9 +63,9 @@ Quotient is an AI-powered inventory management system with a modular, three-laye
 ---
 
 ## General Roadmap
-- [ ] Complete Layer 1 stabilization and bug fixes
-- [ ] Begin Layer 2 analytics and data modeling
-- [ ] Prototype Layer 3 dashboard and API
+- [ ] Complete Layer 1 (Babbage) stabilization and bug fixes
+- [ ] Begin Layer 2 (Magellan) analytics and data modeling
+- [ ] Prototype Layer 3 (Hopper) dashboard and API
 - [ ] Gather user feedback and iterate
 
 ---
