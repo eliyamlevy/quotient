@@ -171,29 +171,20 @@ class EntityExtractor:
         Returns:
             Formatted prompt
         """
-        prompt = f"""Extract inventory items from this text and return as a JSON array. Each item should have these fields:
-- name: Clean product name
-- quantity: Number as integer
-- price: Price as float (without currency symbol)
-- category: Product category
+        prompt = f"""Extract inventory items from this text and return as a JSON array. For each item found, extract:
+- name: The actual product name
+- quantity: The number as integer
+- price: The price as float (without currency symbol)
+- category: The product category
 - vendor: Manufacturer or vendor name
 - part_number: Part number if available
 - description: Product description
 
-Text: {text}
+Text to extract from: {text}
 
-Return only a valid JSON array with this exact format:
-[
-  {{
-    "name": "Product Name",
-    "quantity": 10,
-    "price": 29.99,
-    "category": "Electronics",
-    "vendor": "Vendor Name",
-    "part_number": "ABC-123",
-    "description": "Product description"
-  }}
-]"""
+Return a JSON array with the actual extracted items, not example data. If no items are found, return an empty array [].
+
+JSON:"""
         return prompt
     
     def _extract_with_rules(self, text: str) -> List[Dict[str, Any]]:
