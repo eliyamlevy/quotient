@@ -31,6 +31,7 @@ from quotient.core.config import QuotientConfig
 from quotient.core.pipeline import QuotientPipeline
 from quotient.utils.data_models import InventoryItem
 from quotient.utils.hardware_utils import HardwareDetector
+from quotient.babbage.preproc import PreprocPipeline
 
 # Configure logging
 logging.basicConfig(
@@ -120,10 +121,17 @@ class TextProcessingRequest(BaseModel):
 class LLMPromptRequest(BaseModel):
     prompt: str
 
+# Pydantic model for pre-processing request
+class PreprocRequest(BaseModel):
+    text: str
+
+# PreprocPipeline will be initialized after pipeline is available
+preproc = None
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize the Quotient pipeline on startup."""
-    global pipeline, metrics
+    global pipeline, metrics, preproc
     
     try:
         logger.info("🚀 Initializing Quotient API Server...")
@@ -169,6 +177,9 @@ async def startup_event():
             logger.info("📋 Model Information:")
             for key, value in metrics.model_info.items():
                 logger.info(f"  {key}: {value}")
+        
+        # Initialize preproc with real LLM prompt function
+        preproc = PreprocPipeline(llm_prompt_func=pipeline.prompt_llm)
         
         logger.info("✅ Quotient pipeline initialized successfully!")
         logger.info("🌐 API Server ready on http://0.0.0.0:8000")
@@ -470,6 +481,16 @@ async def prompt_llm(request: LLMPromptRequest):
         raise HTTPException(status_code=503, detail="Pipeline not initialized")
     response = pipeline.prompt_llm(request.prompt)
     return {"response": response}
+
+@app.post("/preproc-text")
+async def preproc_text(request: PreprocRequest):
+    """
+    Run the multi-layer LLM pre-processing pipeline on input text and return all intermediate outputs.
+    """
+    if preproc is None:
+        raise HTTPException(status_code=503, detail="Preproc pipeline not initialized")
+    results = preproc.run_pipeline(request.text)
+    return results
 
 if __name__ == "__main__":
     # Run the API server
