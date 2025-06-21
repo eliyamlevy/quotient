@@ -71,3 +71,28 @@ Quotient is an AI-powered inventory management system with a modular, three-laye
 ---
 
 **Last updated:** June 2025 
+
+# TODOS for Quotient (CUDA Branch)
+
+## 1. LLM Extraction Reliability
+- [ ] Upgrade bitsandbytes on the server to enable 4-bit quantization for Llama models
+- [ ] Ensure LLM loads successfully and is used for all extraction
+- [ ] Improve prompt engineering for more accurate, structured JSON output
+- [ ] Add post-processing to robustly extract JSON from LLM output (handle edge cases)
+
+## 2. Prompt Optimization
+- [ ] Experiment with prompt wording to maximize extraction accuracy (see directions below)
+- [ ] Test with various inventory text/file formats and refine prompt iteratively
+- [ ] Consider using a smaller or more instruction-tuned model if Llama-3-8B is too generic
+
+## 3. Extraction Quality
+- [ ] Add more real-world sample data for testing
+- [ ] Add tests for edge cases and error handling
+- [ ] Monitor and log LLM output for debugging
+
+## 4. Layer 2/3 Planning
+- [ ] Begin design for analytics (Layer 2) and dashboard/API (Layer 3)
+
+---
+
+**Last updated:** 2025-06-21 
