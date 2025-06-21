@@ -30,7 +30,7 @@ except ImportError:
 from quotient.core.config import QuotientConfig
 from quotient.core.pipeline import QuotientPipeline
 from quotient.utils.data_models import InventoryItem
-from quotient.utils.hardware_utils import get_hardware_info
+from quotient.utils.hardware_utils import HardwareDetector
 
 # Configure logging
 logging.basicConfig(
@@ -134,7 +134,8 @@ async def startup_event():
         
         # Hardware detection
         logger.info("🔧 Hardware Detection:")
-        hardware_info = get_hardware_info()
+        hardware_detector = HardwareDetector()
+        hardware_info = hardware_detector.get_device_info()
         for key, value in hardware_info.items():
             logger.info(f"  {key}: {value}")
         
@@ -226,6 +227,10 @@ async def get_system_info():
     memory = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
     
+    # Get hardware info
+    hardware_detector = HardwareDetector()
+    hardware_info = hardware_detector.get_device_info()
+    
     return {
         "system": {
             "platform": platform.system(),
@@ -234,7 +239,7 @@ async def get_system_info():
             "cpu_count": psutil.cpu_count(),
             "cpu_count_logical": psutil.cpu_count(logical=True)
         },
-        "hardware": get_hardware_info(),
+        "hardware": hardware_info,
         "resources": {
             "memory_total_gb": round(memory.total / (1024**3), 2),
             "memory_available_gb": round(memory.available / (1024**3), 2),
