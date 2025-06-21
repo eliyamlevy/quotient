@@ -138,10 +138,13 @@ pipeline = QuotientPipeline(config)
 results = pipeline.process_documents(["invoice.pdf", "inventory.xlsx"])
 ```
 
-## 📚 Documentation
+## �� Documentation
 
-- [Deployment Guide](DEPLOYMENT_GUIDE.md) - Complete deployment instructions
-- [Hugging Face Setup](HUGGINGFACE_SETUP.md) - Token configuration guide
+- [Architecture Plan](docs/ARCHITECTURE_PLAN.md)
+- [Deployment Guide](docs/DEPLOYMENT_GUIDE.md)
+- [CUDA Deployment Guide](docs/DEPLOYMENT_CUDA.md)
+- [Hugging Face Setup](docs/HUGGINGFACE_SETUP.md)
+- [Project TODOs](docs/TODOS.md)
 
 ## 🤝 Contributing
 
