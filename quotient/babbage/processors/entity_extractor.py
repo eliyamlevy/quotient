@@ -82,7 +82,8 @@ class EntityExtractor:
                 torch_dtype=config["torch_dtype"],
                 device_map=config["device_map"],
                 load_in_4bit=True,  # Use 4-bit quantization for memory efficiency
-                trust_remote_code=True
+                trust_remote_code=True,
+                use_safetensors=True
             )
             
             # Create pipeline

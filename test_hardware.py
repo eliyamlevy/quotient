@@ -95,22 +95,14 @@ def test_entity_extractor():
 
 
 def test_configuration():
-    """Test configuration with different LLM backends."""
+    """Test configuration for CUDA deployment with Llama backend."""
     print("\n=== Testing Configuration ===")
     
     try:
-        # Test OpenAI configuration
-        config_openai = QuotientConfig()
-        config_openai.llm_backend = "openai"
-        config_openai.openai_api_key = "test-key"
-        
-        print(f"OpenAI Config: {config_openai.llm_backend}")
-        print(f"OpenAI Model: {config_openai.openai_model}")
-        
         # Test Llama configuration
         config_llama = QuotientConfig()
         config_llama.llm_backend = "llama"
-        config_llama.llama_model = "meta-llama/Meta-Llama-3-8B-Instruct"
+        config_llama.llama_model = "meta-llama/Llama-2-7b-chat-hf"
         
         print(f"Llama Config: {config_llama.llm_backend}")
         print(f"Llama Model: {config_llama.llama_model}")
