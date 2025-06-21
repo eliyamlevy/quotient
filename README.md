@@ -5,22 +5,15 @@ Quotient is a sophisticated AI-powered inventory management system with a three-
 ## 🚀 Features
 
 ### **Layer 1: Babbage Service (Data Ingestion & Processing)**
-- **Multi-format Document Processing**: PDFs, emails, spreadsheets, images
-- **AI-Powered Entity Extraction**: Using local Llama models or OpenAI
-- **Hardware-Aware Optimization**: Automatic CUDA/MPS/CPU detection and optimization
+- **Multi-format Document Processing**: PDFs, spreadsheets, images
+- **AI-Powered Entity Extraction**: Using local Llama models
+- **Hardware-Aware Optimization**: Automatic hardware detection and optimization
 - **Data Normalization**: Standardized inventory item formatting
 
-### **Hardware Optimization**
-- **CUDA Support**: Optimized for NVIDIA GPUs with automatic memory management
-- **Apple Silicon Support**: MPS acceleration for Mac users
-- **CPU Fallback**: Graceful degradation for systems without GPU
-- **Memory Management**: Automatic quantization based on available resources
-
 ### **Supported File Types**
-- **Documents**: PDF, DOCX, TXT
+- **Documents**: PDF, TXT
 - **Spreadsheets**: XLSX, CSV
 - **Images**: JPG, PNG (with OCR)
-- **Emails**: EML files
 
 ## 🏗️ Architecture
 
@@ -39,46 +32,58 @@ Quotient/
 └── tests/                  # Test suite
 ```
 
+## 🌿 Deployment Branches
+
+This repository contains different deployment configurations optimized for different environments:
+
+### **`slim` Branch - Laptop Development**
+- Lightweight version for Mac/Laptop development
+- MPS acceleration for Apple Silicon
+- CPU fallback support
+- Minimal dependencies
+
+**Quick Start (Laptop)**:
+```bash
+git checkout slim
+conda create -n quotient python=3.11
+conda activate quotient
+pip install -r requirements.txt
+```
+
+### **`cuda-deployment` Branch - CUDA Server**
+- Full CUDA optimization for NVIDIA GPUs
+- 4-bit quantization support
+- Optimized for Ubuntu servers
+- Complete deployment guide
+
+**Quick Start (CUDA Server)**:
+```bash
+git checkout cuda-deployment
+conda env create -f environment.yml
+conda activate quotient
+```
+
+### **`main` Branch - Base System**
+- Core functionality without hardware-specific optimizations
+- Good starting point for custom deployments
+- Manual configuration required
+
 ## 🛠️ Installation
 
 ### Prerequisites
-- Python 3.13.2
+- Python 3.11+
 - Conda (recommended for environment management)
-- NVIDIA GPU with CUDA support (for optimal performance)
 
 ### Quick Start
 
-1. **Clone the repository**
+1. **Choose your deployment branch** (see above)
+2. **Clone the repository**
    ```bash
    git clone <your-repo-url>
    cd quotient
    ```
 
-2. **Create conda environment**
-   ```bash
-   conda create -n quotient python=3.13.2
-   conda activate quotient
-   ```
-
-3. **Install PyTorch with hardware support**
-   ```bash
-   # For CUDA (Ubuntu/Linux)
-   conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
-   
-   # For MPS (Apple Silicon)
-   conda install pytorch=2.5.1 -c pytorch
-   ```
-
-4. **Install dependencies**
-   ```bash
-   conda install transformers=4.51.3 huggingface_accelerate=1.4.0
-   pip install -r requirements.txt
-   ```
-
-5. **Test the installation**
-   ```bash
-   python test_hardware.py
-   ```
+3. **Follow branch-specific instructions**
 
 ## 🔧 Configuration
 
@@ -86,16 +91,15 @@ Create a `.env` file in the project root:
 
 ```bash
 # LLM Configuration
-LLM_BACKEND=llama  # or "openai"
-LLAMA_MODEL=meta-llama/Meta-Llama-3-8B-Instruct
+LLM_BACKEND=llama
+LLAMA_MODEL=microsoft/DialoGPT-medium  # No token required
 
 # Hardware Optimization
-USE_CUDA=true
 USE_MPS=true
-MAX_MEMORY_GB=16
+MAX_MEMORY_GB=8
 
 # Processing Configuration
-MAX_FILE_SIZE_MB=100
+MAX_FILE_SIZE_MB=50
 OUTPUT_DIR=output
 ```
 
@@ -134,51 +138,10 @@ pipeline = QuotientPipeline(config)
 results = pipeline.process_documents(["invoice.pdf", "inventory.xlsx"])
 ```
 
-### Hardware Information
-```python
-from quotient.utils.hardware_utils import print_hardware_info
-
-# Display hardware capabilities
-print_hardware_info()
-```
-
-## 🎯 Performance
-
-### Hardware-Specific Optimizations
-
-**NVIDIA GPU (CUDA)**:
-- Float16 precision for faster inference
-- Automatic memory mapping
-- Quantization support (8-bit/4-bit)
-- Flash attention for large models
-
-**Apple Silicon (MPS)**:
-- Float32 precision (MPS limitation)
-- Memory-efficient processing
-- Optimized for Mac hardware
-
-**CPU Fallback**:
-- Quantized models for memory efficiency
-- Rule-based extraction as backup
-- Compatible with all systems
-
-### Expected Performance
-- **CUDA (RTX 4080)**: 0.5-2 seconds per document
-- **MPS (M2 Pro)**: 2-5 seconds per document  
-- **CPU**: 10-30 seconds per document
-
-## 🔒 Security
-
-- Local model inference (no data sent to external APIs)
-- Configurable API key management
-- Secure file handling
-- Environment-based configuration
-
 ## 📚 Documentation
 
-- [Deployment Guide](DEPLOYMENT_GUIDE.md) - Complete Ubuntu deployment instructions
-- [API Reference](docs/api.md) - Detailed API documentation
-- [Hardware Optimization](docs/hardware.md) - Performance tuning guide
+- [Deployment Guide](DEPLOYMENT_GUIDE.md) - Complete deployment instructions
+- [Hugging Face Setup](HUGGINGFACE_SETUP.md) - Token configuration guide
 
 ## 🤝 Contributing
 
@@ -198,7 +161,6 @@ For issues and support:
 1. Check the [troubleshooting guide](docs/troubleshooting.md)
 2. Review hardware compatibility
 3. Check PyTorch and transformers documentation
-4. Open an issue on GitHub
 
 ## 🎉 Acknowledgments
 
