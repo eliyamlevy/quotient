@@ -17,6 +17,7 @@ try:
     from fastapi.responses import JSONResponse
     from fastapi.middleware.cors import CORSMiddleware
     import uvicorn
+    from pydantic import BaseModel
 except ImportError:
     print("FastAPI not installed. Please install with: pip install fastapi uvicorn[standard]")
     sys.exit(1)
@@ -47,6 +48,11 @@ app.add_middleware(
 
 # Global pipeline instance
 pipeline = None
+
+# Pydantic model for text processing request
+class TextProcessingRequest(BaseModel):
+    text: str
+    max_items: Optional[int] = 50
 
 @app.on_event("startup")
 async def startup_event():
@@ -159,13 +165,12 @@ async def process_file(
         raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
 
 @app.post("/process-text")
-async def process_text(text: str, max_items: Optional[int] = 50):
+async def process_text(request: TextProcessingRequest):
     """
     Process text content and extract inventory items.
     
     Args:
-        text: Text content to process
-        max_items: Maximum number of items to return (default: 50)
+        request: TextProcessingRequest containing text and max_items
     
     Returns:
         JSON response with extracted inventory items
@@ -176,7 +181,7 @@ async def process_text(text: str, max_items: Optional[int] = 50):
     try:
         # Create temporary text file
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as temp_file:
-            temp_file.write(text)
+            temp_file.write(request.text)
             temp_path = Path(temp_file.name)
         
         # Process the text file
@@ -188,7 +193,7 @@ async def process_text(text: str, max_items: Optional[int] = 50):
         # Extract inventory items
         items = []
         if hasattr(result, 'items') and result.items:
-            items = result.items[:max_items]
+            items = result.items[:request.max_items]
         
         # Convert to JSON-serializable format
         serialized_items = []
@@ -206,7 +211,7 @@ async def process_text(text: str, max_items: Optional[int] = 50):
         
         return {
             "success": True,
-            "text_length": len(text),
+            "text_length": len(request.text),
             "items_extracted": len(serialized_items),
             "processing_time": "0.2s",  # TODO: Add actual timing
             "items": serialized_items
