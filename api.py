@@ -227,9 +227,25 @@ async def get_system_info():
     memory = psutil.virtual_memory()
     disk = psutil.disk_usage('/')
     
-    # Get hardware info
+    # Get hardware info and convert PyTorch objects to strings
     hardware_detector = HardwareDetector()
     hardware_info = hardware_detector.get_device_info()
+    
+    # Convert PyTorch objects to JSON-serializable format
+    serialized_hardware_info = {}
+    for key, value in hardware_info.items():
+        if hasattr(value, '__str__'):
+            serialized_hardware_info[key] = str(value)
+        elif isinstance(value, dict):
+            # Handle nested dictionaries
+            serialized_hardware_info[key] = {}
+            for sub_key, sub_value in value.items():
+                if hasattr(sub_value, '__str__'):
+                    serialized_hardware_info[key][sub_key] = str(sub_value)
+                else:
+                    serialized_hardware_info[key][sub_key] = sub_value
+        else:
+            serialized_hardware_info[key] = value
     
     return {
         "system": {
@@ -239,7 +255,7 @@ async def get_system_info():
             "cpu_count": psutil.cpu_count(),
             "cpu_count_logical": psutil.cpu_count(logical=True)
         },
-        "hardware": hardware_info,
+        "hardware": serialized_hardware_info,
         "resources": {
             "memory_total_gb": round(memory.total / (1024**3), 2),
             "memory_available_gb": round(memory.available / (1024**3), 2),
