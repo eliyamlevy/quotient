@@ -116,6 +116,10 @@ class TextProcessingRequest(BaseModel):
     text: str
     max_items: Optional[int] = 50
 
+# Pydantic model for LLM prompt request
+class LLMPromptRequest(BaseModel):
+    prompt: str
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize the Quotient pipeline on startup."""
@@ -452,6 +456,20 @@ async def get_supported_formats():
             {"extension": ".png", "type": "PNG Image"}
         ]
     }
+
+@app.post("/prompt-llm")
+async def prompt_llm(request: LLMPromptRequest):
+    """
+    Directly prompt the underlying LLM and return the raw response text.
+    Args:
+        request: LLMPromptRequest containing the prompt string
+    Returns:
+        JSON response with the LLM's output
+    """
+    if not pipeline:
+        raise HTTPException(status_code=503, detail="Pipeline not initialized")
+    response = pipeline.prompt_llm(request.prompt)
+    return {"response": response}
 
 if __name__ == "__main__":
     # Run the API server

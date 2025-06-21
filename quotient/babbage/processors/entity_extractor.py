@@ -255,3 +255,15 @@ JSON:"""
         )
         
         return has_meaningful_data 
+
+    def prompt_llm(self, prompt: str) -> str:
+        """Directly prompt the underlying LLM and return the raw response text."""
+        if not self.llm_pipeline:
+            self.logger.error("LLM pipeline not available for direct prompt.")
+            return "[ERROR] LLM pipeline not available."
+        try:
+            result = self.llm_pipeline(prompt)
+            return result[0]['generated_text']
+        except Exception as e:
+            self.logger.error(f"LLM prompt failed: {str(e)}")
+            return f"[ERROR] LLM prompt failed: {str(e)}" 

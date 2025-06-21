@@ -378,4 +378,8 @@ class Babbage:
         Returns:
             Dictionary with statistics
         """
-        return self.stats.copy() 
+        return self.stats.copy()
+
+    def prompt_llm(self, prompt: str) -> str:
+        """Directly prompt the underlying LLM and return the raw response text."""
+        return self.entity_extractor.prompt_llm(prompt) 

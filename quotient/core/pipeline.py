@@ -100,4 +100,8 @@ class QuotientPipeline:
         Returns:
             Validation result
         """
-        return self.babbage.validate_document(document_path) 
+        return self.babbage.validate_document(document_path)
+
+    def prompt_llm(self, prompt: str) -> str:
+        """Directly prompt the underlying LLM and return the raw response text."""
+        return self.babbage.prompt_llm(prompt) 
