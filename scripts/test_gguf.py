@@ -12,8 +12,7 @@ def test_gguf_model():
     """Test GGUF model loading and inference."""
     
     # Create a test config with GGUF model path
-    config = QuotientConfig()
-    config.gguf_model_path = "models/llama-2-7b-chat.Q4_K_M.gguf"  # Update this path
+    config = QuotientConfig.from_yaml()
     
     print(f"Testing GGUF model: {config.gguf_model_path}")
     
