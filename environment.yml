@@ -17,6 +17,7 @@ dependencies:
   - python-dotenv
   - numpy
   - opencv
+  - psutil
   - pip
   - pip:
     - transformers>=4.30.0

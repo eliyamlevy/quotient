@@ -5,8 +5,8 @@ import requests
 import json
 from pathlib import Path
 
-# API base URL
-BASE_URL = "http://localhost:8000"
+# API base URL - updated for server deployment
+BASE_URL = "http://multivac:8000"
 
 def test_health():
     """Test the health endpoint."""
@@ -35,6 +35,28 @@ def test_supported_formats():
     try:
         response = requests.get(f"{BASE_URL}/supported-formats")
         print(f"Supported formats: {response.status_code}")
+        print(json.dumps(response.json(), indent=2))
+        return response.status_code == 200
+    except requests.exceptions.ConnectionError:
+        print("❌ API server not running")
+        return False
+
+def test_stats():
+    """Test the statistics endpoint."""
+    try:
+        response = requests.get(f"{BASE_URL}/stats")
+        print(f"Statistics: {response.status_code}")
+        print(json.dumps(response.json(), indent=2))
+        return response.status_code == 200
+    except requests.exceptions.ConnectionError:
+        print("❌ API server not running")
+        return False
+
+def test_system_info():
+    """Test the system info endpoint."""
+    try:
+        response = requests.get(f"{BASE_URL}/system-info")
+        print(f"System info: {response.status_code}")
         print(json.dumps(response.json(), indent=2))
         return response.status_code == 200
     except requests.exceptions.ConnectionError:
@@ -106,6 +128,8 @@ def main():
         ("Health Check", test_health),
         ("Root Endpoint", test_root),
         ("Supported Formats", test_supported_formats),
+        ("Statistics", test_stats),
+        ("System Info", test_system_info),
         ("Text Processing", test_process_text),
         ("File Processing", test_process_file),
     ]

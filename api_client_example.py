@@ -8,7 +8,7 @@ from pathlib import Path
 class QuotientAPIClient:
     """Client for the Quotient API."""
     
-    def __init__(self, base_url="http://localhost:8000"):
+    def __init__(self, base_url="http://multivac:8000"):
         self.base_url = base_url
     
     def health_check(self):
