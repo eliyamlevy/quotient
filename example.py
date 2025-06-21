@@ -21,18 +21,45 @@ def main():
     print("🚀 Quotient - AI-Powered Inventory Management System")
     print("=" * 60)
     
-    # Check if OpenAI API key is set
-    if not os.getenv("OPENAI_API_KEY"):
-        print("❌ Error: OPENAI_API_KEY environment variable is required")
-        print("Please set your OpenAI API key:")
-        print("export OPENAI_API_KEY='your-api-key-here'")
-        return
-    
     try:
         # Initialize the pipeline
         print("📋 Initializing Quotient pipeline...")
-        pipeline = QuotientPipeline()
+        config = QuotientConfig()
+        pipeline = QuotientPipeline(config)
         print("✅ Pipeline initialized successfully")
+        
+        # Check if a file was provided as command line argument
+        if len(sys.argv) > 1:
+            file_path = Path(sys.argv[1])
+            if file_path.exists():
+                print(f"\n📄 Processing file: {file_path}")
+                print("-" * 40)
+                
+                result = pipeline.process_single_document(file_path)
+                
+                # Display results
+                print(f"📊 Processing Results:")
+                print(f"   - Items extracted: {len(result.items)}")
+                print(f"   - Processing time: {result.processing_time:.2f} seconds")
+                print(f"   - Confidence: {result.extraction_confidence:.2f}")
+                
+                if result.items:
+                    print(f"\n📦 Extracted Items:")
+                    for i, item in enumerate(result.items, 1):
+                        print(f"   {i}. {item.item_name}")
+                        print(f"      Part #: {item.part_number or 'N/A'}")
+                        print(f"      Quantity: {item.quantity or 'N/A'}")
+                        print(f"      Unit Price: ${item.unit_price or 'N/A'}")
+                        print(f"      Vendor: {item.vendor_name or 'N/A'}")
+                        print(f"      Status: {item.status.value}")
+                        print()
+                else:
+                    print("❌ No items extracted from the file")
+                
+                return
+            else:
+                print(f"❌ File not found: {file_path}")
+                return
         
         # Example 1: Process a text file with inventory data
         print("\n📄 Example 1: Processing text file")
@@ -70,7 +97,7 @@ def main():
             f.write(sample_text)
         
         # Process the file
-        result = pipeline.process_document(sample_file)
+        result = pipeline.process_single_document(sample_file)
         
         # Display results
         print(f"📊 Processing Results:")
@@ -89,63 +116,28 @@ def main():
                 print(f"      Status: {item.status.value}")
                 print()
         
-        # Example 2: Process email content
-        print("\n📧 Example 2: Processing email content")
+        # Example 2: Get processing status
+        print("\n📈 Example 2: Processing Status")
         print("-" * 40)
         
-        sample_email = """
-        From: vendor@example.com
-        To: buyer@company.com
-        Subject: Quote for Office Supplies
+        status = pipeline.get_processing_status()
+        print(f"📊 Pipeline Status:")
+        for key, value in status.items():
+            if isinstance(value, dict):
+                print(f"   - {key}:")
+                for sub_key, sub_value in value.items():
+                    print(f"     {sub_key}: {sub_value}")
+            else:
+                print(f"   - {key}: {value}")
         
-        Dear Buyer,
-        
-        Please find our quote for the requested office supplies:
-        
-        - 50 reams of printer paper (A4, 80gsm) at $8.50 per ream
-        - 20 boxes of pens (black, ballpoint) at $12.00 per box
-        - 10 desk organizers at $45.00 each
-        
-        Total: $1,370.00
-        
-        Best regards,
-        Office Supply Co.
-        """
-        
-        email_result = pipeline.process_email(sample_email)
-        
-        print(f"📊 Email Processing Results:")
-        print(f"   - Items extracted: {len(email_result.items)}")
-        print(f"   - Processing time: {email_result.processing_time:.2f} seconds")
-        
-        if email_result.items:
-            print(f"\n📦 Extracted Items from Email:")
-            for i, item in enumerate(email_result.items, 1):
-                print(f"   {i}. {item.item_name}")
-                print(f"      Quantity: {item.quantity or 'N/A'}")
-                print(f"      Unit Price: ${item.unit_price or 'N/A'}")
-                print()
-        
-        # Example 3: Get processing statistics
-        print("\n📈 Example 3: Processing Statistics")
+        # Example 3: Validate a document
+        print("\n🔍 Example 3: Document Validation")
         print("-" * 40)
         
-        stats = pipeline.get_processing_stats()
-        print(f"📊 Overall Statistics:")
-        for key, value in stats.items():
+        validation = pipeline.validate_document(sample_file)
+        print(f"📄 Validation Results:")
+        for key, value in validation.items():
             print(f"   - {key}: {value}")
-        
-        # Example 4: Export data
-        print("\n💾 Example 4: Exporting Data")
-        print("-" * 40)
-        
-        # Export to CSV
-        csv_path = pipeline.export_data("csv", "inventory_export.csv")
-        print(f"📄 Data exported to: {csv_path}")
-        
-        # Export to DataFrame
-        df = pipeline.export_data("dataframe")
-        print(f"📊 DataFrame shape: {df.shape}")
         
         # Clean up
         if sample_file.exists():
@@ -161,7 +153,6 @@ def main():
     except Exception as e:
         print(f"❌ Error: {str(e)}")
         print("\n🔧 Troubleshooting:")
-        print("   - Check your OpenAI API key is valid")
         print("   - Ensure all dependencies are installed")
         print("   - Check the logs for more details")
 

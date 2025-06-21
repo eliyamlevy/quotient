@@ -9,7 +9,7 @@ from ..core.config import QuotientConfig
 from ..utils.data_models import InventoryItem, ProcessingResult, DataSource, ItemStatus
 from ..utils.validators import (
     validate_file_type, validate_file_size, validate_pdf_content,
-    validate_image_content, validate_spreadsheet_content, extract_text_from_email
+    validate_image_content, validate_spreadsheet_content
 )
 from ..utils.formatters import (
     parse_currency, parse_quantity, format_part_number, format_vendor_name,
@@ -18,7 +18,6 @@ from ..utils.formatters import (
 from .extractors.pdf_extractor import PDFExtractor
 from .extractors.image_extractor import ImageExtractor
 from .extractors.spreadsheet_extractor import SpreadsheetExtractor
-from .extractors.email_extractor import EmailExtractor
 from .processors.entity_extractor import EntityExtractor
 from .normalizers.data_normalizer import DataNormalizer
 
@@ -39,7 +38,6 @@ class Babbage:
         self.pdf_extractor = PDFExtractor(config)
         self.image_extractor = ImageExtractor(config)
         self.spreadsheet_extractor = SpreadsheetExtractor(config)
-        self.email_extractor = EmailExtractor(config)
         
         # Initialize processors
         self.entity_extractor = EntityExtractor(config)
@@ -140,71 +138,6 @@ class Babbage:
         
         return result
     
-    def process_email(self, email_content: str, email_metadata: Optional[Dict[str, Any]] = None) -> ProcessingResult:
-        """Process email content and extract inventory information.
-        
-        Args:
-            email_content: Raw email content
-            email_metadata: Optional metadata about the email
-            
-        Returns:
-            ProcessingResult containing extracted items and metadata
-        """
-        start_time = time.time()
-        
-        self.logger.info("Babbage processing email content")
-        
-        # Create result object
-        result = ProcessingResult(
-            source_type=DataSource.EMAIL
-        )
-        
-        try:
-            # Extract text from email
-            raw_text = extract_text_from_email(email_content)
-            result.raw_text = raw_text
-            
-            if not raw_text:
-                result.add_error("No text content extracted from email")
-                return result
-            
-            # Extract entities using AI
-            extracted_data = self.entity_extractor.extract_entities(raw_text)
-            
-            # Create inventory items
-            items = self._create_inventory_items(extracted_data, "email")
-            
-            # Normalize data
-            normalized_items = self.data_normalizer.normalize_inventory_items(items)
-            
-            # Add items to result
-            for item in normalized_items:
-                result.add_item(item)
-            
-            # Update statistics
-            self.stats["total_processed"] += 1
-            self.stats["total_items"] += len(normalized_items)
-            self.stats["successful_extractions"] += 1
-            
-            # Calculate confidence
-            result.extraction_confidence = self._calculate_confidence(normalized_items)
-            
-        except Exception as e:
-            self.logger.error(f"Error processing email: {str(e)}")
-            result.add_error(f"Email processing failed: {str(e)}")
-            self.stats["failed_extractions"] += 1
-        
-        finally:
-            result.processing_time = time.time() - start_time
-            result.layer1_result = {
-                "service": "babbage",
-                "extraction_method": "email_parser",
-                "text_length": len(result.raw_text) if result.raw_text else 0,
-                "items_extracted": len(result.items)
-            }
-        
-        return result
-    
     def get_supported_formats(self) -> List[str]:
         """Get list of supported file formats.
         
@@ -234,19 +167,22 @@ class Babbage:
                 }
             
             # Check file type
-            if not validate_file_type(file_path):
+            supported_formats = [fmt.lstrip('.') for fmt in self.config.supported_formats]
+            is_valid, error_msg = validate_file_type(str(file_path), supported_formats)
+            if not is_valid:
                 return {
                     'valid': False,
-                    'error': 'Unsupported file type',
+                    'error': error_msg,
                     'supported': False,
                     'file_type': file_path.suffix.lower()
                 }
             
             # Check file size
-            if not validate_file_size(str(file_path), self.config.max_file_size_mb):
+            is_size_valid, size_error = validate_file_size(str(file_path), self.config.max_file_size_mb)
+            if not is_size_valid:
                 return {
                     'valid': False,
-                    'error': 'File too large',
+                    'error': size_error,
                     'supported': True,
                     'file_size_mb': file_path.stat().st_size / (1024 * 1024)
                 }
@@ -279,8 +215,7 @@ class Babbage:
             "extractors": {
                 "pdf": "available",
                 "image": "available", 
-                "spreadsheet": "available",
-                "email": "available"
+                "spreadsheet": "available"
             },
             "processors": {
                 "entity_extractor": "available",
@@ -321,8 +256,12 @@ class Babbage:
             result.add_error(f"File not found: {file_path}")
             return
         
-        if not validate_file_type(file_path):
-            result.add_error(f"Unsupported file type: {file_path.suffix}")
+        # Get supported formats from config
+        supported_formats = [fmt.lstrip('.') for fmt in self.config.supported_formats]
+        
+        is_valid, error_msg = validate_file_type(str(file_path), supported_formats)
+        if not is_valid:
+            result.add_error(error_msg)
             return
         
         if not validate_file_size(str(file_path), self.config.max_file_size_mb):

@@ -85,7 +85,8 @@ class QuotientPipeline:
             'layer2_gap_analysis': 'not_implemented',
             'layer3_data_completion': 'not_implemented',
             'config': {
-                'openai_configured': bool(self.config.openai_api_key),
+                'llm_backend': self.config.llm_backend,
+                'llama_model': self.config.llama_model,
                 'supported_formats': self.babbage.get_supported_formats()
             }
         }

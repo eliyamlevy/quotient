@@ -8,12 +8,12 @@ import re
 # Optional imports for AI/ML functionality
 try:
     import torch
-    from openai import OpenAI
+    from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
     TORCH_AVAILABLE = True
-    OPENAI_AVAILABLE = True
+    TRANSFORMERS_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
-    OPENAI_AVAILABLE = False
+    TRANSFORMERS_AVAILABLE = False
 
 from ...core.config import QuotientConfig
 from ...utils.data_models import InventoryItem, ItemStatus
@@ -33,49 +33,55 @@ class EntityExtractor:
         self.logger = logging.getLogger(__name__)
         
         # Initialize LLM backend
-        self.llm_backend = getattr(config, 'llm_backend', 'openai')
+        self.llm_backend = "llama"  # Only llama supported
         self.device = None
         self.llm_pipeline = None
-        self.client = None
         
         if not TORCH_AVAILABLE:
             self.logger.warning("PyTorch not available, AI features will be limited")
             return
         
-        self.device = get_optimal_device()
+        if not TRANSFORMERS_AVAILABLE:
+            self.logger.warning("Transformers not available, AI features will be limited")
+            return
         
-        if self.llm_backend == 'llama':
-            self._initialize_llama()
-        elif OPENAI_AVAILABLE and hasattr(config, 'openai_api_key') and config.openai_api_key:
-            self.client = OpenAI(api_key=config.openai_api_key)
-        else:
-            self.logger.warning("No LLM backend configured, entity extraction will be limited")
+        self.device = get_optimal_device()
+        self._initialize_llama()
     
     def _initialize_llama(self):
         """Initialize Llama model for local inference."""
-        if not TORCH_AVAILABLE:
-            self.logger.error("PyTorch not available for Llama model")
+        if not TORCH_AVAILABLE or not TRANSFORMERS_AVAILABLE:
+            self.logger.error("PyTorch or Transformers not available for Llama model")
             return
             
         try:
-            from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+            model_id = getattr(self.config, 'llama_model', 'meta-llama/Llama-2-7b-chat-hf')
+            self.logger.info(f"Loading local LLM model: {model_id}")
             
-            model_id = getattr(self.config, 'llama_model', 'meta-llama/Meta-Llama-3-8B-Instruct')
-            self.logger.info(f"Loading Llama model: {model_id}")
+            # Get hardware-optimized config for CUDA
+            config = get_model_config(model_size_gb=7.0)  # 7B model
             
-            # Get hardware-optimized config
-            config = get_model_config(model_size_gb=8.0)  # Assume 8GB model
+            # Prepare token for gated models
+            token = getattr(self.config, 'huggingface_token', None)
+            if token:
+                self.logger.info("Using Hugging Face token for model access")
             
             # Load tokenizer
-            tokenizer = AutoTokenizer.from_pretrained(model_id)
+            tokenizer = AutoTokenizer.from_pretrained(
+                model_id,
+                token=token,
+                trust_remote_code=True
+            )
+            if tokenizer.pad_token is None:
+                tokenizer.pad_token = tokenizer.eos_token
             
-            # Load model with hardware optimization
+            # Load model with CUDA optimization
             model = AutoModelForCausalLM.from_pretrained(
                 model_id,
+                token=token,
                 torch_dtype=config["torch_dtype"],
                 device_map=config["device_map"],
-                load_in_8bit=config["load_in_8bit"],
-                load_in_4bit=config.get("load_in_4bit", False),
+                load_in_4bit=True,  # Use 4-bit quantization for memory efficiency
                 trust_remote_code=True
             )
             
@@ -85,19 +91,17 @@ class EntityExtractor:
                 model=model,
                 tokenizer=tokenizer,
                 device=self.device,
-                max_new_tokens=512,
+                max_new_tokens=512,  # Increased for better responses
                 do_sample=True,
                 temperature=0.1,
-                top_p=0.9
+                top_p=0.9,
+                pad_token_id=tokenizer.eos_token_id
             )
             
-            self.logger.info("Llama model loaded successfully")
+            self.logger.info("Local LLM model loaded successfully")
             
-        except ImportError:
-            self.logger.error("transformers library not installed. Install with: pip install transformers")
-            self.llm_pipeline = None
         except Exception as e:
-            self.logger.error(f"Failed to load Llama model: {str(e)}")
+            self.logger.error(f"Failed to load local LLM model: {str(e)}")
             self.llm_pipeline = None
     
     def extract_entities(self, text: str) -> List[Dict[str, Any]]:
@@ -112,10 +116,8 @@ class EntityExtractor:
         self.logger.info("Extracting entities from text")
         
         try:
-            if self.llm_backend == 'llama' and self.llm_pipeline:
+            if self.llm_pipeline:
                 return self._extract_with_llama(text)
-            elif self.client:
-                return self._extract_with_openai(text)
             else:
                 return self._extract_with_rules(text)
                 
@@ -124,7 +126,7 @@ class EntityExtractor:
             return []
     
     def _extract_with_llama(self, text: str) -> List[Dict[str, Any]]:
-        """Extract entities using local Llama model.
+        """Extract entities using local LLM model.
         
         Args:
             text: Text content
@@ -150,59 +152,18 @@ class EntityExtractor:
                 if isinstance(entities, list):
                     return entities
                 else:
-                    self.logger.warning("Llama response is not a list, using rule-based extraction")
+                    self.logger.warning("LLM response is not a list, using rule-based extraction")
                     return self._extract_with_rules(text)
             else:
-                self.logger.warning("No JSON array found in Llama response, using rule-based extraction")
+                self.logger.warning("No JSON array found in LLM response, using rule-based extraction")
                 return self._extract_with_rules(text)
                 
         except Exception as e:
-            self.logger.error(f"Llama extraction failed: {str(e)}")
-            return self._extract_with_rules(text)
-    
-    def _extract_with_openai(self, text: str) -> List[Dict[str, Any]]:
-        """Extract entities using OpenAI.
-        
-        Args:
-            text: Text content
-            
-        Returns:
-            List of extracted entities
-        """
-        try:
-            prompt = self._create_extraction_prompt(text)
-            
-            response = self.client.chat.completions.create(
-                model=self.config.openai_model or "gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are an expert at extracting inventory-related information from text. Extract all relevant entities and return them as a JSON array."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.1,
-                max_tokens=2000
-            )
-            
-            content = response.choices[0].message.content
-            
-            # Parse JSON response
-            try:
-                entities = json.loads(content)
-                if isinstance(entities, list):
-                    return entities
-                else:
-                    self.logger.warning("AI response is not a list, using rule-based extraction")
-                    return self._extract_with_rules(text)
-                    
-            except json.JSONDecodeError:
-                self.logger.warning("Failed to parse AI response as JSON, using rule-based extraction")
-                return self._extract_with_rules(text)
-                
-        except Exception as e:
-            self.logger.error(f"AI extraction failed: {str(e)}")
+            self.logger.error(f"LLM extraction failed: {str(e)}")
             return self._extract_with_rules(text)
     
     def _create_extraction_prompt(self, text: str) -> str:
-        """Create prompt for entity extraction.
+        """Create a prompt for entity extraction.
         
         Args:
             text: Text content
@@ -210,23 +171,13 @@ class EntityExtractor:
         Returns:
             Formatted prompt
         """
-        return f"""
-Extract inventory-related entities from the following text. Return the results as a JSON array of objects with these fields:
-- name: Product/part name
-- description: Description of the item
-- quantity: Quantity (number)
-- unit_price: Unit price (number, extract from text)
-- total_price: Total price (number, calculate if possible)
-- category: Category/type of item
-- manufacturer: Manufacturer/vendor name
-- part_number: Part number/SKU
-- unit: Unit of measurement (pcs, kg, etc.)
+        prompt = f"""Extract inventory items from this text and return as JSON array. Each item should have: name, quantity, price, category, status.
 
-Text to analyze:
-{text[:3000]}  # Limit text length for API
+Text: {text}
 
-Return only valid JSON array.
-"""
+Return only the JSON array, no other text:
+["""
+        return prompt
     
     def _extract_with_rules(self, text: str) -> List[Dict[str, Any]]:
         """Extract entities using rule-based approach.
@@ -266,7 +217,7 @@ Return only valid JSON array.
         if len(line) < 5 or line.startswith('#'):
             return None
         
-        entity = {}
+        entity = {'original_line': line}  # Store original line for clean name extraction
         
         # Extract quantity
         quantity_match = re.search(r'\b(\d+)\s*(pcs?|pieces?|units?|items?|kg|lbs?|meters?|m|cm|mm)\b', line, re.IGNORECASE)
@@ -326,7 +277,7 @@ Return only valid JSON array.
             entity['description'] = description
         
         # Only return entity if we have meaningful information
-        if len(entity) >= 2:  # At least 2 fields
+        if len(entity) >= 3:  # At least 2 fields plus original_line
             return entity
         
         return None
@@ -356,10 +307,50 @@ Return only valid JSON array.
         line = re.sub(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Inc|Corp|LLC|Ltd|Company|Co)\b', '', line)
         line = re.sub(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Technologies|Systems|Solutions|Group)\b', '', line)
         
-        # Clean up extra whitespace
+        # Remove common invoice prefixes and suffixes
+        line = re.sub(r'^Qty:\s*-\s*', '', line)  # Remove "Qty: - " prefix
+        line = re.sub(r'\s*-\s*each\s*-\s*Total:.*$', '', line)  # Remove "- each - Total: $X.XX"
+        line = re.sub(r'\s*-\s*Total:.*$', '', line)  # Remove "- Total: $X.XX"
+        line = re.sub(r'\s*each\s*', '', line)  # Remove "each"
+        
+        # Clean up extra whitespace and dashes
         description = re.sub(r'\s+', ' ', line).strip()
+        description = re.sub(r'^\s*-\s*', '', description)  # Remove leading dash
+        description = re.sub(r'\s*-\s*$', '', description)  # Remove trailing dash
         
         return description if len(description) > 3 else ""
+    
+    def _extract_item_name(self, line: str) -> str:
+        """Extract clean item name from line.
+        
+        Args:
+            line: Text line
+            
+        Returns:
+            Clean item name
+        """
+        # Start with the cleaned description
+        item_name = self._extract_description(line)
+        
+        # If we have a good item name, return it
+        if item_name and len(item_name) > 3:
+            return item_name
+        
+        # Fallback: try to extract product name patterns
+        # Look for common product patterns
+        product_patterns = [
+            r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+(?:Resistor|Capacitor|LED|Diode|Transistor|IC|Chip)\b',
+            r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+\d+[A-ZΩµ]+\b',  # e.g., "Resistor 10kΩ"
+            r'\b[A-Z][a-z]+\s+\d+[A-ZΩµ]+\s+\d+[A-Z]+\b',  # e.g., "Capacitor 100µF 25V"
+        ]
+        
+        for pattern in product_patterns:
+            match = re.search(pattern, line)
+            if match:
+                return match.group(0)
+        
+        # If all else fails, return a generic name
+        return "Unknown Item"
     
     def extract_inventory_items(self, text: str) -> List[InventoryItem]:
         """Extract inventory items from text.
@@ -375,8 +366,30 @@ Return only valid JSON array.
         
         for entity in entities:
             try:
+                # Get the original line to extract clean item name
+                original_line = entity.get('original_line', '')
+                
+                # Extract clean item name
+                item_name = self._extract_item_name(original_line) if original_line else entity.get('name', 'Unknown Item')
+                
+                # If we don't have a good item name, try to create one from available data
+                if item_name == 'Unknown Item' or len(item_name) < 3:
+                    # Try to construct a name from available fields
+                    name_parts = []
+                    if entity.get('part_number'):
+                        name_parts.append(entity.get('part_number'))
+                    if entity.get('category') and entity.get('category') != 'Unknown':
+                        name_parts.append(entity.get('category'))
+                    if entity.get('description') and len(entity.get('description', '')) > 3:
+                        name_parts.append(entity.get('description'))
+                    
+                    if name_parts:
+                        item_name = ' '.join(name_parts)
+                    else:
+                        item_name = entity.get('description', 'Unknown Item')
+                
                 item = InventoryItem(
-                    item_name=entity.get('name', entity.get('description', 'Unknown Item')),
+                    item_name=item_name,
                     description=entity.get('description', ''),
                     quantity=entity.get('quantity', 0),
                     unit_price=entity.get('unit_price', 0.0),
