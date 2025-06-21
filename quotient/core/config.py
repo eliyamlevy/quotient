@@ -19,16 +19,16 @@ class QuotientConfig:
     
     # Local LLM Configuration
     llm_backend: str = "llama"  # "llama" only
-    llama_model: str = "meta-llama/Llama-2-7b-chat-hf"  # Good balance for CUDA
+    llama_model: str = "microsoft/DialoGPT-medium"  # Lightweight, no token required
     
-    # Hardware Optimization (CUDA focused)
-    use_cuda: bool = True
-    use_mps: bool = False  # Not needed on Linux server
-    max_memory_gb: int = 16  # Adjust based on your GPU
+    # Hardware Optimization (MPS/CPU focused)
+    use_cuda: bool = False  # Disabled for slim branch
+    use_mps: bool = True  # Enable for Apple Silicon
+    max_memory_gb: int = 8  # Conservative for laptops
     
     # Processing Configuration
-    max_file_size_mb: int = 100
-    supported_formats: tuple = ("pdf", "xlsx", "csv", "jpg", "png")  # Removed docx, eml
+    max_file_size_mb: int = 50  # Smaller for laptops
+    supported_formats: tuple = ("pdf", "xlsx", "csv", "jpg", "png")  # Essential formats only
     
     # Output Configuration
     output_format: str = "json"
@@ -36,28 +36,34 @@ class QuotientConfig:
     
     def __post_init__(self):
         """Initialize configuration from environment variables."""
-        # Hugging Face Token
+        # Hugging Face Token (optional for lightweight models)
         if not self.huggingface_token:
             self.huggingface_token = os.getenv("HUGGINGFACE_TOKEN")
         
         # LLM Backend - force llama
         self.llm_backend = "llama"
         
-        # Llama Model
+        # Llama Model - prefer lightweight models
         llama_model = os.getenv("LLAMA_MODEL")
         if llama_model:
             self.llama_model = llama_model
+        else:
+            # Default to lightweight model
+            self.llama_model = "microsoft/DialoGPT-medium"
         
-        # Hardware settings
-        cuda_available = os.getenv("USE_CUDA", "true").lower() == "true"
-        self.use_cuda = cuda_available
+        # Hardware settings - optimize for laptops
+        self.use_cuda = False  # Disable CUDA for slim branch
         
-        # MPS not needed on Linux server
-        self.use_mps = False
+        # Enable MPS for Apple Silicon
+        mps_available = os.getenv("USE_MPS", "true").lower() == "true"
+        self.use_mps = mps_available
         
+        # Conservative memory settings for laptops
         max_memory = os.getenv("MAX_MEMORY_GB")
         if max_memory:
             self.max_memory_gb = int(max_memory)
+        else:
+            self.max_memory_gb = 8  # Default to 8GB for laptops
     
     def get_hardware_config(self):
         """Get hardware-specific configuration."""
@@ -76,6 +82,7 @@ class QuotientConfig:
         # Check if we need Hugging Face token for gated models
         if self.llama_model.startswith("meta-llama/") and not self.huggingface_token:
             print("Warning: Hugging Face token may be required for Llama models")
+            print("Consider using a lightweight model like microsoft/DialoGPT-medium")
             print("Get your token from: https://huggingface.co/settings/tokens")
         
         return True
@@ -94,10 +101,10 @@ class QuotientConfig:
             "max_file_size_mb": self.max_file_size_mb,
             "supported_formats": self.supported_formats,
             "tesseract_path": "",
-            "batch_size": 10,
+            "batch_size": 5,  # Smaller batch size for laptops
             "max_retries": 3,
             "log_level": "INFO",
-            "enable_web_search": True,
+            "enable_web_search": False,  # Disable for slim
             "database_url": "sqlite:///quotient.db",
             "vector_db_path": "./vector_db",
             "llm_backend": self.llm_backend,

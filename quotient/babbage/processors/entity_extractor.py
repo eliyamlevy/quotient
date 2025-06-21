@@ -55,13 +55,13 @@ class EntityExtractor:
             return
             
         try:
-            model_id = getattr(self.config, 'llama_model', 'meta-llama/Llama-2-7b-chat-hf')
+            model_id = getattr(self.config, 'llama_model', 'microsoft/DialoGPT-medium')
             self.logger.info(f"Loading local LLM model: {model_id}")
             
-            # Get hardware-optimized config for CUDA
-            config = get_model_config(model_size_gb=7.0)  # 7B model
+            # Get hardware-optimized config for MPS/CPU
+            config = get_model_config(model_size_gb=1.0)  # Assume lightweight model
             
-            # Prepare token for gated models
+            # Prepare token for gated models (optional for lightweight models)
             token = getattr(self.config, 'huggingface_token', None)
             if token:
                 self.logger.info("Using Hugging Face token for model access")
@@ -75,13 +75,14 @@ class EntityExtractor:
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
             
-            # Load model with CUDA optimization
+            # Load model with MPS/CPU optimization
             model = AutoModelForCausalLM.from_pretrained(
                 model_id,
                 token=token,
                 torch_dtype=config["torch_dtype"],
                 device_map=config["device_map"],
-                load_in_4bit=True,  # Use 4-bit quantization for memory efficiency
+                load_in_8bit=config["load_in_8bit"],
+                load_in_4bit=config["load_in_4bit"],
                 trust_remote_code=True
             )
             
@@ -91,7 +92,7 @@ class EntityExtractor:
                 model=model,
                 tokenizer=tokenizer,
                 device=self.device,
-                max_new_tokens=512,  # Increased for better responses
+                max_new_tokens=256,  # Reduced for faster processing
                 do_sample=True,
                 temperature=0.1,
                 top_p=0.9,
