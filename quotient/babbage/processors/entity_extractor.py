@@ -91,7 +91,6 @@ class EntityExtractor:
                 "text-generation",
                 model=model,
                 tokenizer=tokenizer,
-                device=self.device,
                 max_new_tokens=512,  # Increased for better responses
                 do_sample=True,
                 temperature=0.1,
@@ -172,12 +171,29 @@ class EntityExtractor:
         Returns:
             Formatted prompt
         """
-        prompt = f"""Extract inventory items from this text and return as JSON array. Each item should have: name, quantity, price, category, status.
+        prompt = f"""Extract inventory items from this text and return as a JSON array. Each item should have these fields:
+- name: Clean product name
+- quantity: Number as integer
+- price: Price as float (without currency symbol)
+- category: Product category
+- vendor: Manufacturer or vendor name
+- part_number: Part number if available
+- description: Product description
 
 Text: {text}
 
-Return only the JSON array, no other text:
-["""
+Return only a valid JSON array with this exact format:
+[
+  {{
+    "name": "Product Name",
+    "quantity": 10,
+    "price": 29.99,
+    "category": "Electronics",
+    "vendor": "Vendor Name",
+    "part_number": "ABC-123",
+    "description": "Product description"
+  }}
+]"""
         return prompt
     
     def _extract_with_rules(self, text: str) -> List[Dict[str, Any]]:
@@ -220,16 +236,113 @@ Return only the JSON array, no other text:
         
         entity = {'original_line': line}  # Store original line for clean name extraction
         
-        # Extract quantity
-        quantity_match = re.search(r'\b(\d+)\s*(pcs?|pieces?|units?|items?|kg|lbs?|meters?|m|cm|mm)\b', line, re.IGNORECASE)
-        if quantity_match:
-            entity['quantity'] = int(quantity_match.group(1))
-            entity['unit'] = quantity_match.group(2)
+        # Handle pipe-separated format (common in spreadsheets)
+        if '|' in line:
+            parts = [part.strip() for part in line.split('|')]
+            if len(parts) >= 4:
+                # Format: Item Name | Description | Quantity | Price | Category | Vendor | Part Number
+                entity['name'] = parts[0] if parts[0] else 'Unknown Item'
+                entity['description'] = parts[1] if len(parts) > 1 and parts[1] else ''
+                
+                # Extract quantity (handle various formats)
+                quantity_str = parts[2] if len(parts) > 2 else ''
+                quantity = self._extract_quantity_from_string(quantity_str)
+                if quantity is not None:
+                    entity['quantity'] = quantity
+                
+                # Extract price (handle various formats)
+                price_str = parts[3] if len(parts) > 3 else ''
+                price = self._extract_price_from_string(price_str)
+                if price is not None:
+                    entity['unit_price'] = price
+                
+                # Extract category
+                if len(parts) > 4 and parts[4]:
+                    entity['category'] = parts[4]
+                
+                # Extract vendor
+                if len(parts) > 5 and parts[5]:
+                    entity['manufacturer'] = parts[5]
+                
+                # Extract part number
+                if len(parts) > 6 and parts[6]:
+                    entity['part_number'] = parts[6]
+                
+                return entity
         
-        # Extract price information
-        price_match = re.search(r'\$(\d+\.?\d*)', line)
-        if price_match:
-            entity['unit_price'] = float(price_match.group(1))
+        # Fallback to regex-based extraction for non-pipe formats
+        return self._extract_entity_with_regex(line)
+    
+    def _extract_quantity_from_string(self, quantity_str: str) -> Optional[int]:
+        """Extract quantity from string, handling various formats."""
+        if not quantity_str:
+            return None
+        
+        # Remove common prefixes and suffixes
+        quantity_str = re.sub(r'^Qty:\s*', '', quantity_str, flags=re.IGNORECASE)
+        quantity_str = re.sub(r'\s*(pcs?|pieces?|units?|items?|kg|lbs?|meters?|m|cm|mm)\s*$', '', quantity_str, flags=re.IGNORECASE)
+        
+        # Try to extract number
+        try:
+            # Handle decimal numbers
+            if '.' in quantity_str:
+                return int(float(quantity_str))
+            else:
+                return int(quantity_str)
+        except (ValueError, TypeError):
+            return None
+    
+    def _extract_price_from_string(self, price_str: str) -> Optional[float]:
+        """Extract price from string, handling various formats."""
+        if not price_str:
+            return None
+        
+        # Remove currency symbols and common prefixes
+        price_str = re.sub(r'^\$', '', price_str)
+        price_str = re.sub(r'^\s*Price:\s*', '', price_str, flags=re.IGNORECASE)
+        price_str = re.sub(r'\s*each\s*$', '', price_str, flags=re.IGNORECASE)
+        
+        # Try to extract number
+        try:
+            return float(price_str)
+        except (ValueError, TypeError):
+            return None
+    
+    def _extract_entity_with_regex(self, line: str) -> Optional[Dict[str, Any]]:
+        """Extract entity using regex patterns for non-pipe formats."""
+        entity = {'original_line': line}
+        
+        # Extract quantity (more flexible patterns)
+        quantity_patterns = [
+            r'\b(\d+)\s*(pcs?|pieces?|units?|items?|kg|lbs?|meters?|m|cm|mm)\b',
+            r'\b(\d+)\b',  # Any number (fallback)
+        ]
+        
+        for pattern in quantity_patterns:
+            quantity_match = re.search(pattern, line, re.IGNORECASE)
+            if quantity_match:
+                try:
+                    entity['quantity'] = int(quantity_match.group(1))
+                    break
+                except (ValueError, TypeError):
+                    continue
+        
+        # Extract price information (more flexible)
+        price_patterns = [
+            r'\$(\d+\.?\d*)',  # $123.45
+            r'\b(\d+\.?\d*)\s*\$',  # 123.45$
+            r'\b(\d+\.?\d*)\s*(?:dollars?|USD)',  # 123.45 dollars
+            r'\b(\d+\.?\d*)\b',  # Any number (fallback for price)
+        ]
+        
+        for pattern in price_patterns:
+            price_match = re.search(pattern, line, re.IGNORECASE)
+            if price_match:
+                try:
+                    entity['unit_price'] = float(price_match.group(1))
+                    break
+                except (ValueError, TypeError):
+                    continue
         
         # Extract part numbers (common patterns)
         part_patterns = [
@@ -257,13 +370,15 @@ Return only the JSON array, no other text:
                 entity['manufacturer'] = mfg_match.group(0)
                 break
         
-        # Extract category information
+        # Extract category information (expanded keywords)
         category_keywords = {
-            'electronics': ['circuit', 'board', 'chip', 'resistor', 'capacitor', 'diode'],
-            'mechanical': ['bolt', 'nut', 'screw', 'bearing', 'gear', 'pump'],
-            'chemical': ['chemical', 'acid', 'base', 'solvent', 'reagent'],
-            'office': ['paper', 'pen', 'pencil', 'folder', 'binder'],
-            'tools': ['wrench', 'screwdriver', 'hammer', 'drill', 'saw'],
+            'Electronics': ['circuit', 'board', 'chip', 'resistor', 'capacitor', 'diode', 'led', 'transistor', 'ic', 'microcontroller'],
+            'Office Supplies': ['paper', 'pen', 'pencil', 'folder', 'binder', 'printer', 'ink', 'toner'],
+            'Tools': ['wrench', 'screwdriver', 'hammer', 'drill', 'saw', 'pliers', 'socket'],
+            'Mechanical': ['bolt', 'nut', 'screw', 'bearing', 'gear', 'pump', 'motor'],
+            'Chemical': ['chemical', 'acid', 'base', 'solvent', 'reagent', 'powder'],
+            'Furniture': ['chair', 'desk', 'table', 'cabinet', 'shelf'],
+            'Appliances': ['refrigerator', 'microwave', 'coffee', 'machine', 'toaster'],
         }
         
         line_lower = line.lower()
