@@ -1,0 +1,25 @@
+name: quotient
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.1
+  - pandas
+  - openpyxl
+  - pillow
+  - pytesseract
+  - python-dotenv
+  - numpy
+  - pip
+  - pip:
+    - transformers>=4.30.0
+    - accelerate>=0.20.0
+    - bitsandbytes>=0.41.0
+    - PyPDF2>=3.0.0
+    - pdfplumber>=0.9.0 

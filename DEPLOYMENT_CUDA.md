@@ -48,13 +48,16 @@ nvidia-smi
 git clone <your-repo-url>
 cd quotient
 
-# Create virtual environment
-python3.11 -m venv venv
-source venv/bin/activate
+# Option 1: Create environment from file (recommended)
+conda env create -f environment.yml
+conda activate quotient
 
-# Install dependencies
-pip install --upgrade pip
-pip install -r requirements.txt
+# Option 2: Manual setup
+# conda create -n quotient python=3.11 -y
+# conda activate quotient
+# conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia -y
+# conda install -c conda-forge pandas openpyxl pillow pytesseract python-dotenv numpy -y
+# pip install transformers accelerate bitsandbytes PyPDF2 pdfplumber
 ```
 
 ### 4. Configure Environment
@@ -187,6 +190,16 @@ for file in files:
 4. **PDF extraction fails**
    - Install pdfplumber: `pip install pdfplumber`
    - Check PDF file integrity
+
+5. **Conda environment issues**
+   - Update conda: `conda update conda`
+   - Clean environment: `conda clean --all`
+   - Recreate environment: `conda env remove -n quotient && conda env create -f environment.yml`
+
+6. **PyTorch CUDA not found**
+   - Check CUDA version: `nvidia-smi`
+   - Install matching PyTorch version: `conda install pytorch-cuda=12.1 -c pytorch -c nvidia`
+   - Verify installation: `python -c "import torch; print(torch.cuda.is_available())"`
 
 ### Performance Monitoring
 
