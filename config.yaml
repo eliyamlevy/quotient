@@ -1,0 +1,42 @@
+# Quotient Configuration (YAML)
+# This file controls all system, model, and hardware settings for Quotient.
+# Edit as needed and restart the API server to apply changes.
+
+# Hugging Face Configuration (Required for Llama models)
+huggingface_token: "your_huggingface_token_here"  # Get from https://huggingface.co/settings/tokens
+
+# Local LLM Configuration
+llm_backend: "llama"  # Only 'llama' is supported
+llama_model: "meta-llama/Llama-2-7b-chat-hf"  # e.g. meta-llama/Llama-2-7b-chat-hf
+
+# Hardware Optimization
+use_cuda: true        # Set to true to use CUDA (NVIDIA GPU)
+use_mps: false        # Set to true to use Apple MPS (Mac)
+max_memory_gb: 16     # Max GPU memory to use (GB)
+
+# Processing Configuration
+max_file_size_mb: 100
+supported_formats:
+  - pdf
+  - xlsx
+  - csv
+  - jpg
+  - png
+
+# Output Configuration
+output_format: "json"
+output_dir: "output"
+
+# Application/Database/Batch Settings
+batch_size: 10
+max_retries: 3
+log_level: "INFO"
+enable_web_search: true
+
+database_url: "sqlite:///quotient.db"
+vector_db_path: "./vector_db"
+
+tesseract_path: ""  # Set path if tesseract is not in PATH
+
+# Add any additional custom settings below
+# custom_setting: value 

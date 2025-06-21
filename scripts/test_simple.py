@@ -34,7 +34,7 @@ def test_config():
     try:
         from quotient.core.config import QuotientConfig
         
-        config = QuotientConfig()
+        config = QuotientConfig.from_yaml()
         print("✅ Configuration created successfully")
         print(f"   - OpenAI configured: {config.is_ai_enabled()}")
         print(f"   - Supported formats: {len(config.get_supported_formats())}")
@@ -81,7 +81,7 @@ def test_babbage_service():
         from quotient.core.config import QuotientConfig
         from quotient.babbage import Babbage
         
-        config = QuotientConfig()
+        config = QuotientConfig.from_yaml()
         babbage = Babbage(config)
         
         print("✅ Babbage service initialized successfully")
@@ -105,7 +105,7 @@ def test_pipeline():
         from quotient.core.config import QuotientConfig
         from quotient.core.pipeline import QuotientPipeline
         
-        config = QuotientConfig()
+        config = QuotientConfig.from_yaml()
         pipeline = QuotientPipeline(config)
         
         print("✅ Pipeline initialized successfully")

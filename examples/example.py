@@ -24,7 +24,7 @@ def main():
     try:
         # Initialize the pipeline
         print("📋 Initializing Quotient pipeline...")
-        config = QuotientConfig()
+        config = QuotientConfig.from_yaml()
         pipeline = QuotientPipeline(config)
         print("✅ Pipeline initialized successfully")
         

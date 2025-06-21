@@ -100,7 +100,7 @@ def test_configuration():
     
     try:
         # Test Llama configuration
-        config_llama = QuotientConfig()
+        config_llama = QuotientConfig.from_yaml()
         config_llama.llm_backend = "llama"
         config_llama.llama_model = "meta-llama/Llama-2-7b-chat-hf"
         

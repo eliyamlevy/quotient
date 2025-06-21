@@ -30,7 +30,7 @@ def test_config():
     print("=" * 40)
     
     try:
-        config = QuotientConfig()
+        config = QuotientConfig.from_yaml()
         print(f"✅ Configuration loaded successfully")
         print(f"   LLM Backend: {config.llm_backend}")
         print(f"   Model: {config.llama_model}")
@@ -48,7 +48,7 @@ def test_pipeline():
     print("=" * 40)
     
     try:
-        config = QuotientConfig()
+        config = QuotientConfig.from_yaml()
         pipeline = QuotientPipeline(config)
         print("✅ Pipeline initialized successfully")
         
@@ -89,7 +89,7 @@ def test_document_processing():
         with open(test_file, "w") as f:
             f.write(test_content)
         
-        config = QuotientConfig()
+        config = QuotientConfig.from_yaml()
         pipeline = QuotientPipeline(config)
         
         print(f"Processing test file: {test_file}")
