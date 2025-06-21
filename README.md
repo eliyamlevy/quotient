@@ -5,22 +5,20 @@ Quotient is a sophisticated AI-powered inventory management system with a three-
 ## 🚀 Features
 
 ### **Layer 1: Babbage Service (Data Ingestion & Processing)**
-- **Multi-format Document Processing**: PDFs, emails, spreadsheets, images
-- **AI-Powered Entity Extraction**: Using local Llama models or OpenAI
-- **Hardware-Aware Optimization**: Automatic CUDA/MPS/CPU detection and optimization
+- **Multi-format Document Processing**: PDFs, spreadsheets, images
+- **AI-Powered Entity Extraction**: Using local Llama models
+- **Hardware-Aware Optimization**: Automatic MPS/CPU detection and optimization
 - **Data Normalization**: Standardized inventory item formatting
 
 ### **Hardware Optimization**
-- **CUDA Support**: Optimized for NVIDIA GPUs with automatic memory management
 - **Apple Silicon Support**: MPS acceleration for Mac users
 - **CPU Fallback**: Graceful degradation for systems without GPU
 - **Memory Management**: Automatic quantization based on available resources
 
 ### **Supported File Types**
-- **Documents**: PDF, DOCX, TXT
+- **Documents**: PDF, TXT
 - **Spreadsheets**: XLSX, CSV
 - **Images**: JPG, PNG (with OCR)
-- **Emails**: EML files
 
 ## 🏗️ Architecture
 
@@ -42,9 +40,8 @@ Quotient/
 ## 🛠️ Installation
 
 ### Prerequisites
-- Python 3.13.2
+- Python 3.11+
 - Conda (recommended for environment management)
-- NVIDIA GPU with CUDA support (for optimal performance)
 
 ### Quick Start
 
@@ -56,22 +53,21 @@ Quotient/
 
 2. **Create conda environment**
    ```bash
-   conda create -n quotient python=3.13.2
+   conda create -n quotient python=3.11
    conda activate quotient
    ```
 
 3. **Install PyTorch with hardware support**
    ```bash
-   # For CUDA (Ubuntu/Linux)
-   conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
-   
    # For MPS (Apple Silicon)
    conda install pytorch=2.5.1 -c pytorch
+   
+   # For CPU only
+   conda install pytorch -c pytorch
    ```
 
 4. **Install dependencies**
    ```bash
-   conda install transformers=4.51.3 huggingface_accelerate=1.4.0
    pip install -r requirements.txt
    ```
 
@@ -86,16 +82,15 @@ Create a `.env` file in the project root:
 
 ```bash
 # LLM Configuration
-LLM_BACKEND=llama  # or "openai"
-LLAMA_MODEL=meta-llama/Meta-Llama-3-8B-Instruct
+LLM_BACKEND=llama
+LLAMA_MODEL=microsoft/DialoGPT-medium  # No token required
 
 # Hardware Optimization
-USE_CUDA=true
 USE_MPS=true
-MAX_MEMORY_GB=16
+MAX_MEMORY_GB=8
 
 # Processing Configuration
-MAX_FILE_SIZE_MB=100
+MAX_FILE_SIZE_MB=50
 OUTPUT_DIR=output
 ```
 
@@ -146,12 +141,6 @@ print_hardware_info()
 
 ### Hardware-Specific Optimizations
 
-**NVIDIA GPU (CUDA)**:
-- Float16 precision for faster inference
-- Automatic memory mapping
-- Quantization support (8-bit/4-bit)
-- Flash attention for large models
-
 **Apple Silicon (MPS)**:
 - Float32 precision (MPS limitation)
 - Memory-efficient processing
@@ -163,7 +152,6 @@ print_hardware_info()
 - Compatible with all systems
 
 ### Expected Performance
-- **CUDA (RTX 4080)**: 0.5-2 seconds per document
 - **MPS (M2 Pro)**: 2-5 seconds per document  
 - **CPU**: 10-30 seconds per document
 
@@ -176,9 +164,29 @@ print_hardware_info()
 
 ## 📚 Documentation
 
-- [Deployment Guide](DEPLOYMENT_GUIDE.md) - Complete Ubuntu deployment instructions
+- [Deployment Guide](DEPLOYMENT_GUIDE.md) - Complete deployment instructions
 - [API Reference](docs/api.md) - Detailed API documentation
 - [Hardware Optimization](docs/hardware.md) - Performance tuning guide
+
+## 🌿 Branches
+
+This repository contains different deployment configurations:
+
+- **`main`**: Base system with MPS/CPU support
+- **`slim`**: Lightweight version for laptops and development
+- **`cuda-deployment`**: Full CUDA-optimized version for servers
+
+### Branch Selection Guide
+
+**For Mac/Laptop Development**:
+```bash
+git checkout slim
+```
+
+**For CUDA Server Deployment**:
+```bash
+git checkout cuda-deployment
+```
 
 ## 🤝 Contributing
 

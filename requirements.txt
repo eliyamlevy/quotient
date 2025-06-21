@@ -1,8 +1,6 @@
-# Core AI/ML (CUDA optimized)
+# Core AI/ML (lightweight)
 torch>=2.0.0
 transformers>=4.30.0
-accelerate>=0.20.0
-bitsandbytes>=0.41.0
 
 # Document Processing (essential only)
 PyPDF2>=3.0.0
