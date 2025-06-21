@@ -27,10 +27,10 @@ class RefinementPipeline:
         """
         prompt = (
             """
-            You are a data normalization assistant. In the following text, replace all words or phrases that refer to quantity with the label 'quantity'.
+            You are a data normalization assistant. In the following text, replace all words or phrases that mean quantity with the label 'quantity'.
             These include: amount, number of items, quantity, units, count, requested amount, qty, total units, total quantity, pieces, pcs, no. of items, item count, total count, total pcs, total pieces.
             
-            Also, replace all words or phrases that refer to an item ID with the label 'item_id'.
+            Also, replace all words or phrases that mean item id with the label 'item_id'.
             These include: SKU, item code, product number, stock number, product code, part number, item id, id, item number, product id, code, catalog number, ref, reference number, ref no., item ref, item #, product #, part #.
             
             Return the modified text, preserving all other information.
@@ -50,12 +50,10 @@ class RefinementPipeline:
         """
         prompt = (
             """
-            You are an inventory extraction assistant. Given the following normalized text, separate each unique item into its own block, preserving all information related to that item.
-            Each block should contain all fields for that item, including quantity, item_id, description, price, vendor, and any other relevant details.
-            Clearly separate each item, and do not lose any information.
-            
+            Split the following text into separate items, keeping all info for each item together.
             Text:
             {text}
+            Result:
             """
         )
         return self.llm_prompt_func(prompt.format(text=text))
