@@ -1,3 +1,5 @@
+*.gguf
+
 # Python
 __pycache__/
 *.py[cod]
@@ -244,4 +246,4 @@ wandb/
 
 # Local development
 local/
-dev/ 
+dev/
