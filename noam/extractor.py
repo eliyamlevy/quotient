@@ -1,5 +1,19 @@
 def extract_inventory_items_prompt(text):
-    prompt = f"Extract inventory items from this text '{text}' and return as JSON array. Each item should have: name, part number, quantity, and description. The description should be the material specification. Any fields you can't find leave blank. Return only the json response in plain text as if you were an api."
+    prompt = f"""\
+Extract inventory items from this text '{text}' and return as JSON array.
+Each item should have: 
+    name
+    part number
+    quantity
+    description 
+    
+The description should be the material specification. \
+Any fields you can't find leave blank. Return only the json response in plain text as if you were an api. \
+Never return non-JSON text including backtack wrappers around the JSON.
+
+The json should be in the following format:
+
+"""
     return prompt
 
 # print(extract_inventory_items_prompt("Hi, could I please get pricing for these items below and how fast you could get them shipped to Huntington Beach location.Alkemix 5-finger Lap Shear Panels in Alclad 2024-T3 quantity 100 Alkemix 5-finger Lap Shear Panels in Bare 7075-T6 quantity 50"))
