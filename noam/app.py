@@ -29,6 +29,8 @@ def prompt(email_body):
             )
                 
     output = response.choices[0].message.content
+    output = output.removeprefix("```json\n")
+    output = output.removesuffix("\n```")
     
     return output
 

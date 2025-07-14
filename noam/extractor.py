@@ -10,9 +10,6 @@ Each item should have:
 The description should be the material specification. \
 Any fields you can't find leave blank. Return only the json response in plain text as if you were an api. \
 Never return non-JSON text including backtack wrappers around the JSON.
-
-The json should be in the following format:
-
 """
     return prompt
 
