@@ -29,8 +29,17 @@ def prompt(email_body):
             )
                 
     output = response.choices[0].message.content
-    output = output.removeprefix("```json\n")
-    output = output.removesuffix("\n```")
+    # Clean up the output - remove various backtick formats
+    output = output.strip()
+    if output.startswith("```json\n"):
+        output = output.removeprefix("```json\n")
+    elif output.startswith("```"):
+        output = output.removeprefix("```")
+    if output.endswith("\n```"):
+        output = output.removesuffix("\n```")
+    elif output.endswith("```"):
+        output = output.removesuffix("```")
+    output = output.strip()
     
     return output
 

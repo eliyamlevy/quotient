@@ -12,7 +12,7 @@ Each item should have:
 The part number should be the material specification or an alphanumeric key, use context clues to infer if an alphanumeric key is a client id or a part number/material description. \
 The client name is the name in the email signature at the end of each email.\
 Any fields you can't find leave blank. Return only the json response in plain text as if you were an api. \
-Never return non-JSON text including backtack wrappers around the JSON.
+Never return non-JSON text.
 """
     return prompt
 

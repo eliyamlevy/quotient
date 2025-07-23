@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, List
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QLabel, QTextEdit, QFileDialog, QProgressBar,
+    QPushButton, QLabel, QTextEdit, QTextBrowser, QFileDialog, QProgressBar,
     QTableWidget, QTableWidgetItem, QTabWidget, QMessageBox,
     QGroupBox, QGridLayout, QSpinBox, QDoubleSpinBox, QComboBox
 )
@@ -16,6 +16,7 @@ import time
 from openai import OpenAI
 from io import StringIO
 from openpyxl import load_workbook
+import requests
 
 # Import your existing modules
 from email_parser import parse_email
@@ -29,7 +30,7 @@ class AIProcessor(QThread):
     debug_log = pyqtSignal(str)
     
     def __init__(self, email_body: str, provider: str, model_name: str, max_tokens: int, 
-                 temperature: float, server_url: str = "", api_key: str = ""):
+                 temperature: float, server_url: str = "", api_key: str = "", inline_images: list = None):
         super().__init__()
         self.email_body = email_body
         self.provider = provider
@@ -38,8 +39,10 @@ class AIProcessor(QThread):
         self.temperature = temperature
         self.server_url = server_url
         self.api_key = api_key
+        self.inline_images = inline_images or []
         
     def run(self):
+        start_time = time.time()
         try:
             self.progress_updated.emit("Initializing AI client...")
             
@@ -59,12 +62,36 @@ class AIProcessor(QThread):
             self.debug_log.emit(f"Sending request to model: {self.model_name}")
             self.debug_log.emit(f"Max tokens: {self.max_tokens}")
             
+            # Prepare the message content
+            message_content = []
+            
+            # Add text content
+            text_content = extract_inventory_items_prompt(self.email_body)
+            message_content.append({
+                "type": "text",
+                "text": text_content
+            })
+            
+            # Add images if available and model supports vision
+            if self.inline_images:
+                self.debug_log.emit(f"Found {len(self.inline_images)} inline images")
+                for i, img in enumerate(self.inline_images):
+                    self.debug_log.emit(f"Adding image {i+1}: {img['content_type']} (Content-ID: {img['content_id']})")
+                    message_content.append({
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{img['content_type']};base64,{img['data']}"
+                        }
+                    })
+            else:
+                self.debug_log.emit("No inline images found in email")
+            
             response = client.chat.completions.create(
                 model=self.model_name,
                 messages=[
                     {
                         "role": "user",
-                        "content": extract_inventory_items_prompt(self.email_body),
+                        "content": message_content,
                     }
                 ],
                 stream=False,
@@ -85,8 +112,17 @@ class AIProcessor(QThread):
             debug_output += "="*50
             self.debug_log.emit(debug_output)
             self.progress_updated.emit(f"Raw LLM Output received (see debug log)")
-            output = output.removeprefix("```json\n")
-            output = output.removesuffix("\n```")
+            # Clean up the output - remove various backtick formats
+            output = output.strip()
+            if output.startswith("```json\n"):
+                output = output.removeprefix("```json\n")
+            elif output.startswith("```"):
+                output = output.removeprefix("```")
+            if output.endswith("\n```"):
+                output = output.removesuffix("\n```")
+            elif output.endswith("```"):
+                output = output.removesuffix("```")
+            output = output.strip()
             
             # Parse the JSON response
             try:
@@ -98,11 +134,15 @@ class AIProcessor(QThread):
                 self.error_occurred.emit(error_msg)
                 return
             
+            end_time = time.time()
+            processing_time = end_time - start_time
+            
             self.progress_updated.emit("Processing complete!")
             self.processing_complete.emit({
                 'raw_response': output,
                 'dataframe': df,
-                'items_count': len(df)
+                'items_count': len(df),
+                'processing_time': processing_time
             })
             
         except Exception as e:
@@ -114,6 +154,9 @@ class EmailProcessorGUI(QMainWindow):
         self.current_data = None
         self.current_email_file = None
         self.init_ui()
+        
+        # Initialize model capabilities display
+        QTimer.singleShot(1000, lambda: self.update_model_capabilities_display("llama4:scout"))
         
     def init_ui(self):
         self.setWindowTitle("Email Inventory Processor")
@@ -166,9 +209,9 @@ class EmailProcessorGUI(QMainWindow):
         preview_group = QGroupBox("Email Preview")
         preview_layout = QVBoxLayout(preview_group)
         
-        self.email_preview = QTextEdit()
-        self.email_preview.setMaximumHeight(200)
-        self.email_preview.setReadOnly(True)
+        self.email_preview = QTextBrowser()
+        self.email_preview.setMaximumHeight(300)
+        self.email_preview.setOpenExternalLinks(True)
         preview_layout.addWidget(self.email_preview)
         
         layout.addWidget(preview_group)
@@ -270,10 +313,14 @@ class EmailProcessorGUI(QMainWindow):
         
         # Local AI Settings
         self.local_ai_group = QGroupBox("Local AI Server Settings")
-        local_layout = QGridLayout(self.local_ai_group)
+        local_layout = QHBoxLayout(self.local_ai_group)
+        
+        # Left side - Settings
+        settings_widget = QWidget()
+        settings_layout = QGridLayout(settings_widget)
         
         # Model selection
-        local_layout.addWidget(QLabel("AI Model:"), 0, 0)
+        settings_layout.addWidget(QLabel("AI Model:"), 0, 0)
         self.model_combo = QComboBox()
         self.model_combo.addItems([
             "mistral:7b",
@@ -284,21 +331,43 @@ class EmailProcessorGUI(QMainWindow):
             "llama2:chat",
             "llama4:scout"
         ])
-        local_layout.addWidget(self.model_combo, 0, 1)
+        self.model_combo.setCurrentText("llama4:scout")
+        self.model_combo.currentTextChanged.connect(self.on_model_changed)
+        settings_layout.addWidget(self.model_combo, 0, 1)
         
         # Server URL
-        local_layout.addWidget(QLabel("Server URL:"), 1, 0)
+        settings_layout.addWidget(QLabel("Server URL:"), 1, 0)
         self.server_url_input = QTextEdit()
         self.server_url_input.setMaximumHeight(30)
         self.server_url_input.setPlainText("http://localhost:11434/v1")
-        local_layout.addWidget(self.server_url_input, 1, 1)
+        settings_layout.addWidget(self.server_url_input, 1, 1)
         
         # API Key
-        local_layout.addWidget(QLabel("API Key:"), 2, 0)
+        settings_layout.addWidget(QLabel("API Key:"), 2, 0)
         self.local_api_key_input = QTextEdit()
         self.local_api_key_input.setMaximumHeight(30)
         self.local_api_key_input.setPlainText("tom")
-        local_layout.addWidget(self.local_api_key_input, 2, 1)
+        settings_layout.addWidget(self.local_api_key_input, 2, 1)
+        
+        # Add settings widget to left side
+        local_layout.addWidget(settings_widget)
+        
+        # Right side - Model Capabilities
+        capabilities_widget = QWidget()
+        capabilities_layout = QVBoxLayout(capabilities_widget)
+        
+        capabilities_label = QLabel("Model Capabilities")
+        capabilities_label.setStyleSheet("font-weight: bold; font-size: 12px;")
+        capabilities_layout.addWidget(capabilities_label)
+        
+        self.model_capabilities_display = QTextBrowser()
+        self.model_capabilities_display.setMaximumWidth(300)
+        self.model_capabilities_display.setMaximumHeight(150)
+        self.model_capabilities_display.setStyleSheet("background-color: #2d3748; border: 1px solid #dee2e6; border-radius: 4px; color: white;")
+        capabilities_layout.addWidget(self.model_capabilities_display)
+        
+        # Add capabilities widget to right side
+        local_layout.addWidget(capabilities_widget)
         
         layout.addWidget(self.local_ai_group)
         
@@ -368,11 +437,97 @@ class EmailProcessorGUI(QMainWindow):
         layout.addStretch()
         return widget
     
+    def get_model_capabilities(self, model_name: str) -> list:
+        """Fetch model capabilities from Ollama API"""
+        try:
+            url = "http://localhost:11434/api/show"
+            payload = {"model": model_name}
+            response = requests.post(url, json=payload, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Debug: Print the response structure
+            print(f"API Response for {model_name}: {data}")
+            
+            # Handle different response formats
+            if isinstance(data, dict):
+                return data.get("capabilities", [])
+            elif isinstance(data, list) and len(data) > 0:
+                return data[0].get("capabilities", [])
+            else:
+                return []
+        except Exception as e:
+            print(f"Error fetching model capabilities: {e}")
+            return []
+
+    def get_model_info(self, model_name: str) -> dict:
+        """Fetch model information from Ollama API"""
+        try:
+            url = "http://localhost:11434/api/show"
+            payload = {"model": model_name}
+            response = requests.post(url, json=payload, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Handle different response formats
+            if isinstance(data, dict):
+                return data.get("details", {})
+            elif isinstance(data, list) and len(data) > 0:
+                return data[0].get("details", {})
+            else:
+                return {}
+        except Exception as e:
+            print(f"Error fetching model info: {e}")
+            return {}
+    
+    def update_model_capabilities_display(self, model_name: str):
+        """Update the capabilities display for the selected model"""
+        capabilities = self.get_model_capabilities(model_name)
+
+        if capabilities:
+            capabilities_text = f"<b>Model: {model_name}</b><br><br>"
+            capabilities_text += "<b>Capabilities:</b><br>"
+
+            # Check for multimodal capabilities (capabilities is a list)
+            if "vision" in capabilities:
+                capabilities_text += "✅ <b>Vision/Multimodal</b> - Can process images<br>"
+            else:
+                capabilities_text += "❌ <b>Text-only</b> - Cannot process images<br>"
+
+            # Add other capabilities if available
+            if "tools" in capabilities:
+                capabilities_text += f"✅ <b>Tool Use</b><br>"
+            if "completion" in capabilities:
+                capabilities_text += f"✅ <b>Text Completion</b><br>"
+            if "function_calling" in capabilities:
+                capabilities_text += f"✅ <b>Function Calling</b><br>"
+            if "json_mode" in capabilities:
+                capabilities_text += f"✅ <b>JSON Mode</b><br>"
+
+            # Add model details if available in the response
+            model_info = self.get_model_info(model_name)
+            if model_info:
+                if "parameter_size" in model_info:
+                    capabilities_text += f"<br><b>Parameters:</b> {model_info['parameter_size']}<br>"
+                if "family" in model_info:
+                    capabilities_text += f"<b>Family:</b> {model_info['family']}<br>"
+        else:
+            capabilities_text = f"<b>Model: {model_name}</b><br><br>❌ Could not fetch capabilities"
+
+        self.model_capabilities_display.setHtml(capabilities_text)
+    
+    def on_model_changed(self, model_name: str):
+        """Handle model selection change"""
+        self.update_model_capabilities_display(model_name)
+    
     def on_provider_changed(self, provider):
         """Handle AI provider selection change"""
         if provider == "Local AI Server":
             self.local_ai_group.setVisible(True)
             self.chatgpt_group.setVisible(False)
+            # Update capabilities for current model
+            current_model = self.model_combo.currentText()
+            self.update_model_capabilities_display(current_model)
         else:
             self.local_ai_group.setVisible(False)
             self.chatgpt_group.setVisible(True)
@@ -411,24 +566,29 @@ class EmailProcessorGUI(QMainWindow):
             provider = self.provider_combo.currentText()
             
             if provider == "Local AI Server":
+                # Use applied settings if available, otherwise use current UI values
+                server_url = getattr(self, 'current_server_url', self.server_url_input.toPlainText().strip())
+                api_key = getattr(self, 'current_api_key', self.local_api_key_input.toPlainText().strip())
+                test_model = getattr(self, 'current_model', self.model_combo.currentText())
+                
                 client = OpenAI(
-                    base_url=self.server_url_input.toPlainText().strip(),
-                    api_key=self.local_api_key_input.toPlainText().strip(),
+                    base_url=server_url,
+                    api_key=api_key,
                 )
             else:
                 client = OpenAI(
                     api_key=self.chatgpt_api_key_input.toPlainText().strip(),
                 )
+                test_model = "gpt-3.5-turbo"
             
             # Simple test request
-            test_model = "mistral:7b" if provider == "Local AI Server" else "gpt-3.5-turbo"
             response = client.chat.completions.create(
                 model=test_model,
                 messages=[{"role": "user", "content": "Hello"}],
                 max_tokens=5,
             )
             
-            QMessageBox.information(self, "Success", "AI connection test successful!")
+            QMessageBox.information(self, "Success", f"AI connection test successful using model: {test_model}")
             
         except Exception as e:
             QMessageBox.critical(self, "Connection Error", f"Failed to connect: {str(e)}")
@@ -596,16 +756,51 @@ class EmailProcessorGUI(QMainWindow):
             self.load_email_preview(file_path)
     
     def load_email_preview(self, file_path: str):
-        """Load and display email preview"""
+        """Load and display email preview with images"""
         try:
             email = parse_email(file_path)
-            preview_text = f"From: {email.header.get('From', 'Unknown')}\n"
-            preview_text += f"Subject: {email.header.get('Subject', 'No Subject')}\n"
-            preview_text += f"Date: {email.header.get('Date', 'Unknown')}\n"
-            preview_text += f"\n{'='*50}\n\n"
-            preview_text += email.body[:500] + "..." if len(email.body) > 500 else email.body
             
-            self.email_preview.setText(preview_text)
+            # Create HTML content
+            html_content = f"""
+            <div style="font-family: Arial, sans-serif; padding: 10px;">
+                <div style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                    <strong>From:</strong> {email.header.get('From', 'Unknown')}<br>
+                    <strong>Subject:</strong> {email.header.get('Subject', 'No Subject')}<br>
+                    <strong>Date:</strong> {email.header.get('Date', 'Unknown')}
+                </div>
+                <hr style="border: 1px solid #ddd;">
+                <div style="margin-top: 10px;">
+            """
+            
+            # Add inline images to HTML
+            for img in email.inline_images:
+                html_content += f'<img src="data:{img["content_type"]};base64,{img["data"]}" style="max-width: 100%; height: auto; margin: 10px 0;" alt="Inline Image"><br>'
+            
+            # Debug: Log inline images found
+            if email.inline_images:
+                print(f"Found {len(email.inline_images)} inline images")
+                for img in email.inline_images:
+                    print(f"  - Content-ID: {img['content_id']}, Type: {img['content_type']}")
+            else:
+                print("No inline images found")
+            
+            # Add email body
+            body_text = email.body[:1000] + "..." if len(email.body) > 1000 else email.body
+            body_text = body_text.replace('\n', '<br>')
+            html_content += f'<div style="line-height: 1.5;">{body_text}</div>'
+            
+            # Add attachment info if any
+            if email.attachments:
+                html_content += '<hr style="border: 1px solid #ddd; margin: 20px 0;">'
+                html_content += '<div style="background-color: #fff3cd; padding: 10px; border-radius: 5px;">'
+                html_content += '<strong>Attachments:</strong><br>'
+                for attachment in email.attachments:
+                    html_content += f'• {attachment["filename"]}<br>'
+                html_content += '</div>'
+            
+            html_content += '</div>'
+            
+            self.email_preview.setHtml(html_content)
             self.status_bar.showMessage(f"Loaded email: {os.path.basename(file_path)}")
             
         except Exception as e:
@@ -629,6 +824,14 @@ class EmailProcessorGUI(QMainWindow):
         try:
             # Parse email
             email = parse_email(self.current_email_file)
+            
+            # Log image information
+            if email.inline_images:
+                self.log_debug(f"Found {len(email.inline_images)} inline images in email:")
+                for i, img in enumerate(email.inline_images):
+                    self.log_debug(f"  Image {i+1}: {img['content_type']} (Content-ID: {img['content_id']})")
+            else:
+                self.log_debug("No inline images found in email")
             
             # Get AI configuration
             provider = self.provider_combo.currentText()
@@ -655,7 +858,8 @@ class EmailProcessorGUI(QMainWindow):
                 max_tokens,
                 temperature,
                 server_url,
-                api_key
+                api_key,
+                email.inline_images
             )
             
             self.processor.progress_updated.connect(self.update_progress)
@@ -691,6 +895,10 @@ class EmailProcessorGUI(QMainWindow):
         self.display_results(result['dataframe'])
         self.items_count_label.setText(f"Items extracted: {result['items_count']}")
         
+        # Update processing time
+        processing_time = result.get('processing_time', 0)
+        self.processing_time_label.setText(f"Processing time: {processing_time:.2f} seconds")
+        
         # Update raw output tab
         self.raw_output_display.setText(result['raw_response'])
         
@@ -701,7 +909,7 @@ class EmailProcessorGUI(QMainWindow):
         self.filename_input.clear()
         
         # Switch to results tab
-        self.centralWidget().findChild(QTabWidget).setCurrentIndex(1)
+        self.centralWidget().findChild(QTabWidget).setCurrentIndex(3)
         
         QMessageBox.information(self, "Success", "Email processing completed successfully!")
     
