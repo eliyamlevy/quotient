@@ -8,7 +8,7 @@ from io import StringIO
 from email_parser import parse_email
 
 client = OpenAI(
-    base_url="http://localhost:8080/v1",
+    base_url="http://localhost:11434/v1",
     api_key="tom",
 )
 

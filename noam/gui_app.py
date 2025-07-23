@@ -276,9 +276,13 @@ class EmailProcessorGUI(QMainWindow):
         local_layout.addWidget(QLabel("AI Model:"), 0, 0)
         self.model_combo = QComboBox()
         self.model_combo.addItems([
-            "llama.cpp/models/mMistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
-            "llama.cpp/models/llama-2-7b-chat.gguf",
-            "llama.cpp/models/codellama-7b-instruct.gguf"
+            "mistral:7b",
+            "llama2:7b",
+            "codellama:7b",
+            "llama2:13b",
+            "mistral:instruct",
+            "llama2:chat",
+            "llama4:scout"
         ])
         local_layout.addWidget(self.model_combo, 0, 1)
         
@@ -286,7 +290,7 @@ class EmailProcessorGUI(QMainWindow):
         local_layout.addWidget(QLabel("Server URL:"), 1, 0)
         self.server_url_input = QTextEdit()
         self.server_url_input.setMaximumHeight(30)
-        self.server_url_input.setPlainText("http://localhost:8080/v1")
+        self.server_url_input.setPlainText("http://localhost:11434/v1")
         local_layout.addWidget(self.server_url_input, 1, 1)
         
         # API Key
@@ -343,10 +347,23 @@ class EmailProcessorGUI(QMainWindow):
         
         layout.addWidget(common_group)
         
-        # Test Connection Button
+        # Apply and Test Buttons
+        button_layout = QHBoxLayout()
+        
+        apply_btn = QPushButton("Apply Settings")
+        apply_btn.clicked.connect(self.apply_ai_settings)
+        button_layout.addWidget(apply_btn)
+        
         test_btn = QPushButton("Test Connection")
         test_btn.clicked.connect(self.test_ai_connection)
-        layout.addWidget(test_btn)
+        button_layout.addWidget(test_btn)
+        
+        layout.addLayout(button_layout)
+        
+        # Status display for AI config
+        self.ai_config_status = QLabel("Settings not applied")
+        self.ai_config_status.setStyleSheet("color: #e74c3c; padding: 5px;")
+        layout.addWidget(self.ai_config_status)
         
         layout.addStretch()
         return widget
@@ -359,6 +376,34 @@ class EmailProcessorGUI(QMainWindow):
         else:
             self.local_ai_group.setVisible(False)
             self.chatgpt_group.setVisible(True)
+    
+    def apply_ai_settings(self):
+        """Apply AI settings and update all references"""
+        try:
+            # Store current settings
+            self.current_server_url = self.server_url_input.toPlainText().strip()
+            self.current_api_key = self.local_api_key_input.toPlainText().strip()
+            self.current_model = self.model_combo.currentText()
+            self.current_max_tokens = self.max_tokens_spin.value()
+            self.current_temperature = self.temperature_spin.value()
+            
+            # Update status
+            self.ai_config_status.setText("Settings applied successfully!")
+            self.ai_config_status.setStyleSheet("color: #27ae60; padding: 5px;")
+            
+            # Log the applied settings
+            self.log_debug(f"AI Settings Applied:")
+            self.log_debug(f"  Server URL: {self.current_server_url}")
+            self.log_debug(f"  Model: {self.current_model}")
+            self.log_debug(f"  Max Tokens: {self.current_max_tokens}")
+            self.log_debug(f"  Temperature: {self.current_temperature}")
+            
+            QMessageBox.information(self, "Success", "AI settings applied successfully!")
+            
+        except Exception as e:
+            self.ai_config_status.setText("Failed to apply settings")
+            self.ai_config_status.setStyleSheet("color: #e74c3c; padding: 5px;")
+            QMessageBox.critical(self, "Error", f"Failed to apply settings: {str(e)}")
     
     def test_ai_connection(self):
         """Test the AI connection"""
@@ -376,8 +421,9 @@ class EmailProcessorGUI(QMainWindow):
                 )
             
             # Simple test request
+            test_model = "mistral:7b" if provider == "Local AI Server" else "gpt-3.5-turbo"
             response = client.chat.completions.create(
-                model="test" if provider == "Local AI Server" else "gpt-3.5-turbo",
+                model=test_model,
                 messages=[{"role": "user", "content": "Hello"}],
                 max_tokens=5,
             )
@@ -588,21 +634,26 @@ class EmailProcessorGUI(QMainWindow):
             provider = self.provider_combo.currentText()
             
             if provider == "Local AI Server":
-                model_name = self.model_combo.currentText()
-                server_url = self.server_url_input.toPlainText().strip()
-                api_key = self.local_api_key_input.toPlainText().strip()
+                # Use applied settings if available, otherwise use current UI values
+                model_name = getattr(self, 'current_model', self.model_combo.currentText())
+                server_url = getattr(self, 'current_server_url', self.server_url_input.toPlainText().strip())
+                api_key = getattr(self, 'current_api_key', self.local_api_key_input.toPlainText().strip())
+                max_tokens = getattr(self, 'current_max_tokens', self.max_tokens_spin.value())
+                temperature = getattr(self, 'current_temperature', self.temperature_spin.value())
             else:
                 model_name = self.chatgpt_model_combo.currentText()
                 server_url = ""
                 api_key = self.chatgpt_api_key_input.toPlainText().strip()
+                max_tokens = self.max_tokens_spin.value()
+                temperature = self.temperature_spin.value()
             
             # Start AI processing in background
             self.processor = AIProcessor(
                 email.body,
                 provider,
                 model_name,
-                self.max_tokens_spin.value(),
-                self.temperature_spin.value(),
+                max_tokens,
+                temperature,
                 server_url,
                 api_key
             )
