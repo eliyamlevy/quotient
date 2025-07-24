@@ -10,17 +10,18 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QTabWidget, QMessageBox,
     QGroupBox, QGridLayout, QSpinBox, QDoubleSpinBox, QComboBox
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
+from PyQt6.QtCore import QThread, pyqtSignal, QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QIcon, QPixmap
 import time
 from openai import OpenAI
 from io import StringIO
-from openpyxl import load_workbook
 import requests
 
 # Import your existing modules
 from email_parser import parse_email
 from extractor import extract_inventory_items_prompt
+from excel_exporter import create_excel_exporter
 
 class AIProcessor(QThread):
     """Background thread for AI processing"""
@@ -153,6 +154,12 @@ class EmailProcessorGUI(QMainWindow):
         super().__init__()
         self.current_data = None
         self.current_email_file = None
+        
+        # Batch processing data
+        self.batch_email_files = []
+        self.batch_results = []
+        self.current_batch_index = 0
+        
         self.init_ui()
         
         # Initialize model capabilities display
@@ -175,6 +182,7 @@ class EmailProcessorGUI(QMainWindow):
         tabs.addTab(self.create_home_tab(), "Home")
         tabs.addTab(self.create_ai_config_tab(), "AI Config")
         tabs.addTab(self.create_processing_tab(), "Process Email")
+        tabs.addTab(self.create_batch_processing_tab(), "Batch Processing")
         tabs.addTab(self.create_results_tab(), "Results")
         tabs.addTab(self.create_raw_output_tab(), "Raw Output")
         tabs.addTab(self.create_debug_tab(), "Debug Log")
@@ -666,6 +674,121 @@ class EmailProcessorGUI(QMainWindow):
         layout.addWidget(debug_group)
         return widget
     
+    def create_batch_processing_tab(self):
+        """Create the batch processing tab"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        
+        # File selection group
+        file_group = QGroupBox("Batch File Selection")
+        file_layout = QVBoxLayout(file_group)
+        
+        # File selection row
+        file_row = QHBoxLayout()
+        self.batch_file_label = QLabel("No files selected")
+        self.batch_file_label.setStyleSheet("padding: 5px; border: 1px solid #ccc; background: #f9f9f9;")
+        select_files_btn = QPushButton("Select Multiple Email Files (.eml)")
+        select_files_btn.clicked.connect(self.select_batch_files)
+        file_row.addWidget(self.batch_file_label, 1)
+        file_row.addWidget(select_files_btn)
+        file_layout.addLayout(file_row)
+        
+        layout.addWidget(file_group)
+        
+        # Current email display
+        current_email_group = QGroupBox("Current Email")
+        current_email_layout = QVBoxLayout(current_email_group)
+        
+        self.current_email_label = QLabel("No emails selected")
+        self.current_email_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.current_email_label.setStyleSheet("font-size: 14px; font-weight: bold; padding: 10px;")
+        current_email_layout.addWidget(self.current_email_label)
+        
+        layout.addWidget(current_email_group)
+        
+        # Results display
+        results_group = QGroupBox("Email Results")
+        results_layout = QVBoxLayout(results_group)
+        
+        # Results info
+        info_layout = QHBoxLayout()
+        self.batch_items_count_label = QLabel("Items extracted: 0")
+        self.batch_processing_time_label = QLabel("Processing time: --")
+        self.batch_status_label = QLabel("Status: --")
+        info_layout.addWidget(self.batch_items_count_label)
+        info_layout.addWidget(self.batch_processing_time_label)
+        info_layout.addWidget(self.batch_status_label)
+        info_layout.addStretch()
+        results_layout.addLayout(info_layout)
+        
+        # Results table
+        self.batch_results_table = QTableWidget()
+        results_layout.addWidget(self.batch_results_table)
+        
+        # Action buttons
+        action_layout = QHBoxLayout()
+        self.batch_export_btn = QPushButton("Export to Excel")
+        self.batch_export_btn.clicked.connect(self.export_batch_to_excel)
+        self.batch_export_btn.setEnabled(False)
+        action_layout.addWidget(self.batch_export_btn)
+        
+        self.batch_view_raw_btn = QPushButton("View Raw Output")
+        self.batch_view_raw_btn.clicked.connect(self.view_batch_raw_output)
+        self.batch_view_raw_btn.setEnabled(False)
+        action_layout.addWidget(self.batch_view_raw_btn)
+        
+        self.batch_view_email_btn = QPushButton("View Email")
+        self.batch_view_email_btn.clicked.connect(self.view_batch_email)
+        self.batch_view_email_btn.setEnabled(False)
+        action_layout.addWidget(self.batch_view_email_btn)
+        
+        action_layout.addStretch()
+        results_layout.addLayout(action_layout)
+        
+        layout.addWidget(results_group)
+        
+        # Processing controls
+        process_group = QGroupBox("Batch Processing")
+        process_layout = QVBoxLayout(process_group)
+        
+        # Progress bar
+        self.batch_progress_bar = QProgressBar()
+        self.batch_progress_bar.setVisible(False)
+        process_layout.addWidget(self.batch_progress_bar)
+        
+        # Process button
+        self.batch_process_btn = QPushButton("Process Batch")
+        self.batch_process_btn.clicked.connect(self.process_batch)
+        self.batch_process_btn.setEnabled(False)
+        process_layout.addWidget(self.batch_process_btn)
+        
+        layout.addWidget(process_group)
+        
+        # Navigation controls
+        nav_group = QGroupBox("Navigation")
+        nav_layout = QVBoxLayout(nav_group)
+        
+        # Navigation buttons
+        nav_button_layout = QHBoxLayout()
+        nav_button_layout.addStretch()
+        
+        self.prev_btn = QPushButton("◀ Previous")
+        self.prev_btn.clicked.connect(self.previous_email)
+        self.prev_btn.setEnabled(False)
+        nav_button_layout.addWidget(self.prev_btn)
+        
+        self.next_btn = QPushButton("Next ▶")
+        self.next_btn.clicked.connect(self.next_email)
+        self.next_btn.setEnabled(False)
+        nav_button_layout.addWidget(self.next_btn)
+        
+        nav_button_layout.addStretch()
+        nav_layout.addLayout(nav_button_layout)
+        
+        layout.addWidget(nav_group)
+        
+        return widget
+    
     def log_debug(self, message):
         """Add a message to the debug log"""
         timestamp = time.strftime("%H:%M:%S")
@@ -760,21 +883,21 @@ class EmailProcessorGUI(QMainWindow):
         try:
             email = parse_email(file_path)
             
-            # Create HTML content
+            # Create HTML content with better readability
             html_content = f"""
-            <div style="font-family: Arial, sans-serif; padding: 10px;">
-                <div style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
-                    <strong>From:</strong> {email.header.get('From', 'Unknown')}<br>
-                    <strong>Subject:</strong> {email.header.get('Subject', 'No Subject')}<br>
-                    <strong>Date:</strong> {email.header.get('Date', 'Unknown')}
+            <div style="font-family: Arial, sans-serif; padding: 15px; background-color: white; color: #333;">
+                <div style="background-color: #e8f4fd; padding: 12px; border-radius: 6px; margin-bottom: 15px; border-left: 4px solid #2196F3;">
+                    <strong style="color: #1976D2;">From:</strong> <span style="color: #333;">{email.header.get('From', 'Unknown')}</span><br>
+                    <strong style="color: #1976D2;">Subject:</strong> <span style="color: #333;">{email.header.get('Subject', 'No Subject')}</span><br>
+                    <strong style="color: #1976D2;">Date:</strong> <span style="color: #333;">{email.header.get('Date', 'Unknown')}</span>
                 </div>
-                <hr style="border: 1px solid #ddd;">
-                <div style="margin-top: 10px;">
+                <hr style="border: 1px solid #e0e0e0; margin: 15px 0;">
+                <div style="margin-top: 15px;">
             """
             
             # Add inline images to HTML
             for img in email.inline_images:
-                html_content += f'<img src="data:{img["content_type"]};base64,{img["data"]}" style="max-width: 100%; height: auto; margin: 10px 0;" alt="Inline Image"><br>'
+                html_content += f'<img src="data:{img["content_type"]};base64,{img["data"]}" style="max-width: 100%; height: auto; margin: 15px 0; border: 1px solid #e0e0e0; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);" alt="Inline Image"><br>'
             
             # Debug: Log inline images found
             if email.inline_images:
@@ -784,18 +907,25 @@ class EmailProcessorGUI(QMainWindow):
             else:
                 print("No inline images found")
             
-            # Add email body
-            body_text = email.body[:1000] + "..." if len(email.body) > 1000 else email.body
-            body_text = body_text.replace('\n', '<br>')
-            html_content += f'<div style="line-height: 1.5;">{body_text}</div>'
+            # Add email body - use HTML body for better formatting
+            if email.html_body:
+                # Use original HTML for better formatting and newlines
+                body_html = email.html_body
+                # Don't truncate - show full email content
+                html_content += f'<div style="line-height: 1.6; color: #333; font-size: 14px;">{body_html}</div>'
+            else:
+                # Fallback to processed text
+                body_text = email.body
+                body_text = body_text.replace('\n', '<br>')
+                html_content += f'<div style="line-height: 1.6; color: #333; font-size: 14px;">{body_text}</div>'
             
             # Add attachment info if any
             if email.attachments:
-                html_content += '<hr style="border: 1px solid #ddd; margin: 20px 0;">'
-                html_content += '<div style="background-color: #fff3cd; padding: 10px; border-radius: 5px;">'
-                html_content += '<strong>Attachments:</strong><br>'
+                html_content += '<hr style="border: 1px solid #e0e0e0; margin: 20px 0;">'
+                html_content += '<div style="background-color: #fff8e1; padding: 12px; border-radius: 6px; border-left: 4px solid #ff9800;">'
+                html_content += '<strong style="color: #e65100;">Attachments:</strong><br>'
                 for attachment in email.attachments:
-                    html_content += f'• {attachment["filename"]}<br>'
+                    html_content += f'<span style="color: #333;">• {attachment["filename"]}</span><br>'
                 html_content += '</div>'
             
             html_content += '</div>'
@@ -909,7 +1039,7 @@ class EmailProcessorGUI(QMainWindow):
         self.filename_input.clear()
         
         # Switch to results tab
-        self.centralWidget().findChild(QTabWidget).setCurrentIndex(3)
+        self.centralWidget().findChild(QTabWidget).setCurrentIndex(4)
         
         QMessageBox.information(self, "Success", "Email processing completed successfully!")
     
@@ -933,8 +1063,8 @@ class EmailProcessorGUI(QMainWindow):
         self.results_table.resizeColumnsToContents()
     
     def export_to_excel(self):
-        """Export results to Excel"""
-        if not self.current_data or not self.template_label.text() != "No template selected":
+        """Export results to Excel using the new Excel exporter"""
+        if not self.current_data or self.template_label.text() == "No template selected":
             QMessageBox.warning(self, "Warning", "Please select a template and ensure data is processed")
             return
         
@@ -944,20 +1074,14 @@ class EmailProcessorGUI(QMainWindow):
                 # Assume it's in the data directory
                 template_path = os.path.join("data", template_path)
             
-            # Load template
-            wb = load_workbook(template_path)
-            ws = wb['Input Form']  # Adjust sheet name as needed
+            # Create Excel exporter with dependency injection
+            excel_exporter = create_excel_exporter(
+                template_path=template_path,
+                output_directory="data",
+                starting_row=23
+            )
             
             df = self.current_data['dataframe']
-            
-            # Update cells
-            for i, row_data in enumerate(df.values):
-                row_num = 23 + i  # Adjust starting row as needed
-                
-                ws[f'A{row_num}'] = i + 1
-                ws[f'B{row_num}'] = row_data[1] if len(row_data) > 1 else ""  # MFCTR P/N
-                ws[f'C{row_num}'] = f"{row_data[0]}: {row_data[3]}" if len(row_data) > 3 else str(row_data[0])  # DESCRIPTION
-                ws[f'D{row_num}'] = row_data[2] if len(row_data) > 2 else ""  # QTY
             
             # Get custom filename or use default
             custom_filename = self.filename_input.toPlainText().strip()
@@ -966,21 +1090,19 @@ class EmailProcessorGUI(QMainWindow):
                 import re
                 custom_filename = re.sub(r'[<>:"/\\|?*]', '_', custom_filename)
                 
-                # Ensure it has .xlsx extension
-                if not custom_filename.lower().endswith('.xlsx'):
-                    custom_filename += '.xlsx'
+                # Remove .xlsx extension if present (exporter will add it)
+                if custom_filename.lower().endswith('.xlsx'):
+                    custom_filename = custom_filename[:-5]
                 
                 # Check if filename is not empty after cleaning
-                if custom_filename.strip('.xlsx').strip():
-                    output_path = os.path.join("data", custom_filename)
-                else:
-                    # Use auto-generated name if cleaned filename is empty
-                    output_path = os.path.join("data", f"Processed_{int(time.time())}.xlsx")
+                if not custom_filename.strip():
+                    custom_filename = f"Processed_{int(time.time())}"
             else:
                 # Use auto-generated name
-                output_path = os.path.join("data", f"Processed_{int(time.time())}.xlsx")
+                custom_filename = f"Processed_{int(time.time())}"
             
-            wb.save(output_path)
+            # Export using the new Excel exporter
+            output_path = excel_exporter.export_dataframe(df, custom_filename)
             
             QMessageBox.information(self, "Success", f"Exported to: {output_path}")
             
@@ -1004,8 +1126,347 @@ class EmailProcessorGUI(QMainWindow):
                 QMessageBox.information(self, "Success", f"Exported to: {file_path}")
                 
         except Exception as e:
+                        QMessageBox.critical(self, "Export Error", f"Failed to export: {str(e)}")
+    
+    # Batch processing methods
+    def select_batch_files(self):
+        """Select multiple email files for batch processing"""
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Select Email Files",
+            "data",
+            "Email Files (*.eml);;All Files (*)"
+        )
+        
+        if files:
+            self.batch_email_files = files
+            self.batch_file_label.setText(f"{len(files)} files selected")
+            self.batch_process_btn.setEnabled(True)
+            self.current_batch_index = 0
+            self.batch_results = []  # Clear any previous results
+            self.update_batch_display()
+            self.log_debug(f"Selected {len(files)} files for batch processing")
+    
+    def process_batch(self):
+        """Process all selected email files"""
+        self.log_debug("Batch processing started")
+        
+        if not self.batch_email_files:
+            self.log_debug("No batch files selected")
+            return
+        
+        self.log_debug(f"Starting batch processing of {len(self.batch_email_files)} files")
+        
+        self.batch_results = []
+        self.current_batch_index = 0
+        self.batch_process_btn.setEnabled(False)
+        self.batch_progress_bar.setVisible(True)
+        self.batch_progress_bar.setRange(0, len(self.batch_email_files))
+        self.batch_progress_bar.setValue(0)
+        
+        # Process first email
+        self.process_next_batch_email()
+    
+    def process_next_batch_email(self):
+        """Process the next email in the batch"""
+        self.log_debug(f"Processing next batch email: index {self.current_batch_index}, total files {len(self.batch_email_files)}")
+        
+        if self.current_batch_index >= len(self.batch_email_files):
+            # Batch complete
+            self.log_debug("Batch processing complete")
+            self.batch_progress_bar.setVisible(False)
+            self.batch_process_btn.setEnabled(True)
+            self.current_batch_index = 0
+            self.update_batch_display()
+            QMessageBox.information(self, "Success", f"Batch processing complete! Processed {len(self.batch_results)} emails.")
+            return
+        
+        current_file = self.batch_email_files[self.current_batch_index]
+        self.log_debug(f"Processing batch email {self.current_batch_index + 1}/{len(self.batch_email_files)}: {os.path.basename(current_file)}")
+        
+        try:
+            # Parse email
+            email = parse_email(current_file)
+            
+            # Get AI configuration
+            provider = self.provider_combo.currentText()
+            
+            if provider == "Local AI Server":
+                model_name = getattr(self, 'current_model', self.model_combo.currentText())
+                server_url = getattr(self, 'current_server_url', self.server_url_input.toPlainText().strip())
+                api_key = getattr(self, 'current_api_key', self.local_api_key_input.toPlainText().strip())
+                max_tokens = getattr(self, 'current_max_tokens', self.max_tokens_spin.value())
+                temperature = getattr(self, 'current_temperature', self.temperature_spin.value())
+            else:
+                model_name = self.chatgpt_model_combo.currentText()
+                server_url = ""
+                api_key = self.chatgpt_api_key_input.toPlainText().strip()
+                max_tokens = self.max_tokens_spin.value()
+                temperature = self.temperature_spin.value()
+            
+            # Create batch processor
+            self.log_debug(f"Creating AIProcessor for {os.path.basename(current_file)}")
+            self.log_debug(f"Model: {model_name}, Provider: {provider}")
+            
+            self.batch_processor = AIProcessor(
+                email.body,
+                provider,
+                model_name,
+                max_tokens,
+                temperature,
+                server_url,
+                api_key,
+                email.inline_images
+            )
+            
+            self.batch_processor.progress_updated.connect(self.update_batch_progress)
+            self.batch_processor.processing_complete.connect(self.on_batch_email_complete)
+            self.batch_processor.error_occurred.connect(self.on_batch_email_error)
+            self.batch_processor.debug_log.connect(self.log_debug)
+            
+            # Start processing
+            self.log_debug("Starting AIProcessor thread")
+            self.batch_processor.start()
+            
+        except Exception as e:
+            self.on_batch_email_error(f"Failed to start processing {os.path.basename(current_file)}: {str(e)}")
+    
+    def update_batch_progress(self, message: str):
+        """Update batch progress display"""
+        self.log_debug(f"Batch progress: {message}")
+        # Update the status label to show current progress
+        self.batch_status_label.setText(f"Status: {message}")
+    
+    def on_batch_email_complete(self, result: dict):
+        """Handle completion of a single email in batch"""
+        current_file = self.batch_email_files[self.current_batch_index]
+        
+        # Store result
+        email_result = {
+            'file_path': current_file,
+            'filename': os.path.basename(current_file),
+            'data': result,
+            'status': 'success'
+        }
+        self.batch_results.append(email_result)
+        
+        # Update progress
+        self.batch_progress_bar.setValue(self.current_batch_index + 1)
+        self.log_debug(f"Completed email {self.current_batch_index + 1}/{len(self.batch_email_files)}")
+        
+        # Move to next email
+        self.current_batch_index += 1
+        self.process_next_batch_email()
+    
+    def on_batch_email_error(self, error: str):
+        """Handle error in batch processing"""
+        current_file = self.batch_email_files[self.current_batch_index]
+        
+        self.log_debug(f"Error processing {os.path.basename(current_file)}: {error}")
+        
+        # Store error result
+        email_result = {
+            'file_path': current_file,
+            'filename': os.path.basename(current_file),
+            'error': error,
+            'status': 'error'
+        }
+        self.batch_results.append(email_result)
+        
+        # Update progress
+        self.batch_progress_bar.setValue(self.current_batch_index + 1)
+        self.log_debug(f"Completed email {self.current_batch_index + 1}/{len(self.batch_email_files)} (with error)")
+        
+        # Move to next email
+        self.current_batch_index += 1
+        self.process_next_batch_email()
+    
+    def update_batch_display(self):
+        """Update the batch display with current email results"""
+        if not self.batch_email_files:
+            # No files selected
+            self.current_email_label.setText("No emails selected")
+            self.batch_items_count_label.setText("Items extracted: 0")
+            self.batch_processing_time_label.setText("Processing time: --")
+            self.batch_status_label.setText("Status: --")
+            self.batch_results_table.setRowCount(0)
+            self.batch_results_table.setColumnCount(0)
+            self.prev_btn.setEnabled(False)
+            self.next_btn.setEnabled(False)
+            self.batch_export_btn.setEnabled(False)
+            self.batch_view_raw_btn.setEnabled(False)
+            self.batch_view_email_btn.setEnabled(False)
+            return
+        
+        if not self.batch_results:
+            # Files selected but not processed yet
+            if self.current_batch_index < len(self.batch_email_files):
+                current_file = self.batch_email_files[self.current_batch_index]
+                self.current_email_label.setText(f"📧 {os.path.basename(current_file)}")
+            else:
+                self.current_email_label.setText("No emails processed")
+            
+            self.batch_items_count_label.setText("Items extracted: 0")
+            self.batch_processing_time_label.setText("Processing time: --")
+            self.batch_status_label.setText("Status: ⏳ Ready to process")
+            self.batch_results_table.setRowCount(0)
+            self.batch_results_table.setColumnCount(0)
+            
+            # Enable navigation buttons for file browsing
+            self.prev_btn.setEnabled(self.current_batch_index > 0)
+            self.next_btn.setEnabled(self.current_batch_index < len(self.batch_email_files) - 1)
+            
+            self.batch_export_btn.setEnabled(False)
+            self.batch_view_raw_btn.setEnabled(False)
+            self.batch_view_email_btn.setEnabled(True)  # Can view email even before processing
+            return
+        
+        # Ensure index is within bounds
+        if self.current_batch_index >= len(self.batch_results):
+            self.current_batch_index = len(self.batch_results) - 1
+        elif self.current_batch_index < 0:
+            self.current_batch_index = 0
+        
+        current_result = self.batch_results[self.current_batch_index]
+        
+        # Update email label
+        self.current_email_label.setText(f"📧 {current_result['filename']}")
+        
+        # Update navigation buttons
+        self.prev_btn.setEnabled(self.current_batch_index > 0)
+        self.next_btn.setEnabled(self.current_batch_index < len(self.batch_results) - 1)
+        
+        if current_result['status'] == 'success':
+            # Display successful results
+            result_data = current_result['data']
+            self.batch_items_count_label.setText(f"Items extracted: {result_data['items_count']}")
+            self.batch_processing_time_label.setText(f"Processing time: {result_data.get('processing_time', 0):.2f}s")
+            self.batch_status_label.setText("Status: ✅ Success")
+            
+            # Display results table
+            self.display_batch_results(result_data['dataframe'])
+            
+            # Enable action buttons
+            self.batch_export_btn.setEnabled(True)
+            self.batch_view_raw_btn.setEnabled(True)
+            self.batch_view_email_btn.setEnabled(True)
+        else:
+            # Display error
+            self.batch_items_count_label.setText("Items extracted: 0")
+            self.batch_processing_time_label.setText("Processing time: --")
+            self.batch_status_label.setText("Status: ❌ Error")
+            
+            # Clear results table
+            self.batch_results_table.setRowCount(0)
+            self.batch_results_table.setColumnCount(0)
+            
+            # Disable action buttons
+            self.batch_export_btn.setEnabled(False)
+            self.batch_view_raw_btn.setEnabled(False)
+            self.batch_view_email_btn.setEnabled(False)
+    
+    def display_batch_results(self, df: pd.DataFrame):
+        """Display batch results in table"""
+        self.batch_results_table.setRowCount(len(df))
+        self.batch_results_table.setColumnCount(len(df.columns))
+        self.batch_results_table.setHorizontalHeaderLabels(df.columns)
+        
+        for i, row in df.iterrows():
+            for j, value in enumerate(row):
+                item = QTableWidgetItem(str(value))
+                self.batch_results_table.setItem(i, j, item)
+        
+        self.batch_results_table.resizeColumnsToContents()
+    
+    def previous_email(self):
+        """Navigate to previous email in batch"""
+        if self.current_batch_index > 0:
+            self.current_batch_index -= 1
+            self.update_batch_display()
+    
+    def next_email(self):
+        """Navigate to next email in batch"""
+        if self.batch_results:
+            # After processing - navigate through results
+            if self.current_batch_index < len(self.batch_results) - 1:
+                self.current_batch_index += 1
+                self.update_batch_display()
+        elif self.batch_email_files:
+            # Before processing - navigate through selected files
+            if self.current_batch_index < len(self.batch_email_files) - 1:
+                self.current_batch_index += 1
+                self.update_batch_display()
+    
+    def export_batch_to_excel(self):
+        """Export current email result to Excel using the new Excel exporter"""
+        if not self.batch_results or self.current_batch_index >= len(self.batch_results):
+            return
+        
+        current_result = self.batch_results[self.current_batch_index]
+        if current_result['status'] != 'success':
+            QMessageBox.warning(self, "Warning", "Cannot export failed email")
+            return
+        
+        try:
+            # Check if template is selected
+            if self.template_label.text() == "No template selected":
+                QMessageBox.warning(self, "Warning", "Please select a template first")
+                return
+            
+            template_path = self.template_label.text()
+            if not os.path.isabs(template_path):
+                template_path = os.path.join("data", template_path)
+            
+            # Create Excel exporter with dependency injection
+            excel_exporter = create_excel_exporter(
+                template_path=template_path,
+                output_directory="data",
+                starting_row=23
+            )
+            
+            # Generate filename
+            timestamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+            filename = current_result['filename'].replace('.eml', '')
+            output_filename = f"{timestamp}_{filename}"
+            
+            # Export using the new Excel exporter
+            df = current_result['data']['dataframe']
+            output_path = excel_exporter.export_dataframe(df, output_filename)
+            
+            QMessageBox.information(self, "Success", f"Exported to: {output_path}")
+            
+        except Exception as e:
             QMessageBox.critical(self, "Export Error", f"Failed to export: {str(e)}")
-
+    
+    def view_batch_raw_output(self):
+        """View raw output for current email"""
+        if not self.batch_results or self.current_batch_index >= len(self.batch_results):
+            return
+        
+        current_result = self.batch_results[self.current_batch_index]
+        if current_result['status'] != 'success':
+            QMessageBox.warning(self, "Warning", "No raw output available for failed email")
+            return
+        
+        # Switch to raw output tab and display
+        self.raw_output_display.setText(current_result['data']['raw_response'])
+        self.centralWidget().findChild(QTabWidget).setCurrentIndex(5)  # Raw Output tab
+    
+    def view_batch_email(self):
+        """View the current email content"""
+        if not self.batch_email_files or self.current_batch_index >= len(self.batch_email_files):
+            return
+        
+        current_file = self.batch_email_files[self.current_batch_index]
+        
+        try:
+            # Load and display email preview
+            self.load_email_preview(current_file)
+            # Switch to processing tab to show email preview
+            self.centralWidget().findChild(QTabWidget).setCurrentIndex(2)  # Process Email tab
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to load email: {str(e)}")
+    
 def main():
     app = QApplication(sys.argv)
     
