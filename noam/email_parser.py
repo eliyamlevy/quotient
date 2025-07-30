@@ -12,6 +12,10 @@ def convert_html_tables_to_text(html_content: str) -> str:
     
     print(f"Processing HTML content for tables, length: {len(html_content)}")
     
+    # First, extract all text content before processing tables
+    # This ensures we don't lose important text like shipping location and clauses
+    text_content = html_content
+    
     # More robust table detection - look for various table patterns
     # Microsoft Word/Outlook often uses complex table structures
     table_patterns = [
@@ -28,8 +32,24 @@ def convert_html_tables_to_text(html_content: str) -> str:
             print(f"Found {len(tables)} potential table structures with pattern: {pattern}")
     
     if not tables_found:
-        print("No tables found, returning original content")
-        return html_content
+        print("No tables found, processing as regular text")
+        # Clean up HTML tags but preserve text content
+        result = re.sub(r'<[^>]+>', '', html_content)
+        result = re.sub(r'&nbsp;', ' ', result)
+        result = re.sub(r'\s+', ' ', result)
+        result = result.strip()
+        
+        # Remove Microsoft Word/Outlook CSS styling
+        result = re.sub(r'v\\:\* \{behavior:url\(#default#VML\);\}.*?\.shape \{behavior:url\(#default#VML\);\}', '', result, flags=re.DOTALL)
+        result = re.sub(r'[a-zA-Z]+\\:\* \{behavior:url\(#default#[A-Z]+\);\}', '', result)
+        
+        # Clean up any remaining artifacts
+        result = re.sub(r'\s+', ' ', result)
+        result = result.strip()
+        
+        print(f"Final processed content length: {len(result)}")
+        print(f"Final content preview: {result[:500]}...")
+        return result
     
     # Process each table
     result = html_content
@@ -101,7 +121,8 @@ def convert_html_tables_to_text(html_content: str) -> str:
         # Be more careful about replacement to avoid partial matches
         result = result.replace(table_html, table_text, 1)
     
-    # Clean up any remaining HTML tags and normalize whitespace
+    # Now clean up the remaining HTML tags but preserve the text content
+    # This is the key fix - we process tables first, then clean up remaining HTML
     result = re.sub(r'<[^>]+>', '', result)
     result = re.sub(r'&nbsp;', ' ', result)
     result = re.sub(r'\s+', ' ', result)

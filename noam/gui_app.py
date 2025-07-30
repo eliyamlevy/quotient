@@ -218,8 +218,9 @@ class EmailProcessorGUI(QMainWindow):
         preview_layout = QVBoxLayout(preview_group)
         
         self.email_preview = QTextBrowser()
-        self.email_preview.setMaximumHeight(300)
+        self.email_preview.setMaximumHeight(500)
         self.email_preview.setOpenExternalLinks(True)
+        self.email_preview.setStyleSheet("background-color: white;")
         preview_layout.addWidget(self.email_preview)
         
         layout.addWidget(preview_group)
@@ -912,12 +913,12 @@ class EmailProcessorGUI(QMainWindow):
                 # Use original HTML for better formatting and newlines
                 body_html = email.html_body
                 # Don't truncate - show full email content
-                html_content += f'<div style="line-height: 1.6; color: #333; font-size: 14px;">{body_html}</div>'
+                html_content += f'<div style="line-height: 1.6; color: white; font-size: 14px;">{body_html}</div>'
             else:
                 # Fallback to processed text
                 body_text = email.body
                 body_text = body_text.replace('\n', '<br>')
-                html_content += f'<div style="line-height: 1.6; color: #333; font-size: 14px;">{body_text}</div>'
+                html_content += f'<div style="line-height: 1.6; color: white; font-size: 14px;">{body_text}</div>'
             
             # Add attachment info if any
             if email.attachments:
