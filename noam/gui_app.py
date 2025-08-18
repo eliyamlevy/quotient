@@ -22,6 +22,7 @@ import requests
 from email_parser import parse_email
 from extractor import extract_inventory_items_prompt
 from excel_exporter import create_excel_exporter
+from email_diffusion_pipeline import EmailDiffusionPipeline
 
 class AIProcessor(QThread):
     """Background thread for AI processing"""
@@ -981,16 +982,73 @@ class EmailProcessorGUI(QMainWindow):
                 max_tokens = self.max_tokens_spin.value()
                 temperature = self.temperature_spin.value()
             
-            # Start AI processing in background
-            self.processor = AIProcessor(
-                email.body,
-                provider,
-                model_name,
-                max_tokens,
-                temperature,
-                server_url,
-                api_key,
-                email.inline_images
+            # Start Diffusion processing in background (replaces legacy AI flow)
+            class DiffusionProcessor(QThread):
+                progress_updated = pyqtSignal(str)
+                processing_complete = pyqtSignal(dict)
+                error_occurred = pyqtSignal(str)
+                debug_log = pyqtSignal(str)
+
+                def __init__(self, email_path: str, model_name: str, server_url: str):
+                    super().__init__()
+                    self.email_path = email_path
+                    self.model_name = model_name
+                    self.server_url = server_url or "http://localhost:11434"
+
+                def run(self):
+                    start_time = time.time()
+                    try:
+                        self.progress_updated.emit("Initializing diffusion pipeline...")
+                        pipeline = EmailDiffusionPipeline(model_name=self.model_name, api_url=self.server_url)
+                        self.progress_updated.emit("Running diffusion filters...")
+                        result = pipeline.process_email(self.email_path)
+
+                        # Build DataFrame
+                        items_data = []
+                        order_shipping = result.quote_info.shipping_location or ""
+                        order_client = result.quote_info.client_name or ""
+                        order_clauses = ", ".join(result.quote_info.clauses) if result.quote_info.clauses else ""
+                        for it in result.items:
+                            items_data.append({
+                                'part_number': it.part_number,
+                                'quantity': it.quantity,
+                                'description': it.description,
+                                'shipping_location': order_shipping,
+                                'client_name': order_client,
+                                'clauses': order_clauses,
+                            })
+
+                        import pandas as pd
+                        df = pd.DataFrame(items_data)
+
+                        raw_payload = {
+                            'quote_info': {
+                                'shipping_location': order_shipping,
+                                'client_name': order_client,
+                                'clauses': result.quote_info.clauses,
+                            },
+                            'items': [
+                                {'part_number': it.part_number, 'quantity': it.quantity, 'description': it.description}
+                                for it in result.items
+                            ],
+                            'images_processed': len(result.image_texts),
+                        }
+                        raw_response = json.dumps(raw_payload, indent=2)
+
+                        elapsed = time.time() - start_time
+                        self.processing_complete.emit({
+                            'raw_response': raw_response,
+                            'dataframe': df,
+                            'items_count': len(items_data),
+                            'processing_time': elapsed,
+                        })
+                    except Exception as e:
+                        self.error_occurred.emit(str(e))
+
+            self.processor = DiffusionProcessor(
+                email_path=self.current_email_file,
+                model_name=model_name,
+                server_url=server_url,
             )
             
             self.processor.progress_updated.connect(self.update_progress)
