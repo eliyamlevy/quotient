@@ -24,8 +24,6 @@ ORDER-LEVEL INFORMATION (apply to ALL items):
 - Client name: Extract from the email signature at the end of the email. Look for the sender's name in the signature section, typically after "Thank you," or at the bottom of the email. Common patterns include "Name, Title" or "Name\nCompany". Extract just the person's name, not the company name.
 - Clauses: Look for phrases like "clauses [list of codes]" in the email body
 
-For images: Read ALL images that contain table data, order details, or relevant text information. \
-Only ignore images that are clearly logos, signatures, or decorative elements. \
 If an image contains order data (part numbers, quantities, etc.), extract that information. \
 If shipping location or clauses are mentioned in the email text, use those values rather than \
 trying to extract them from images. \

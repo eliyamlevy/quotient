@@ -52,6 +52,7 @@ def convert_html_tables_to_text(html_content: str) -> str:
         return result
     
     # Process each table
+    print(f"📊 Total tables found: {len(tables_found)}")
     result = html_content
     for i, table_html in enumerate(tables_found):
         print(f"Processing table {i+1}, length: {len(table_html)}")

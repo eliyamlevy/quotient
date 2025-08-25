@@ -79,32 +79,49 @@ class EmailDiffusionPipeline:
         print("\n🔍 Filter 1: Image-to-Text Conversion")
         image_texts = self._convert_images_to_text(email.inline_images)
         
-        # Clean email body by removing links before combining
-        print(f"    🔍 Cleaning email body - removing links...")
+        # Count total tables found
+        total_tables = len(email.inline_images)
+        print(f"    📊 Total tables found: {total_tables}")
+        
+        # Clean email body by removing only actual links while preserving formatting
+        print(f"    🔍 Cleaning email body - removing links while preserving formatting...")
         cleaned_body = email.body
-        # Remove URLs, HTTP links, and common link patterns
-        cleaned_body = re.sub(r'https?://[^\s]+', '', cleaned_body)  # Remove HTTP/HTTPS links
-        cleaned_body = re.sub(r'www\.[^\s]+', '', cleaned_body)      # Remove www links
-        cleaned_body = re.sub(r'[^\s]+\.com[^\s]*', '', cleaned_body)  # Remove .com links
-        cleaned_body = re.sub(r'[^\s]+\.org[^\s]*', '', cleaned_body)  # Remove .org links
-        cleaned_body = re.sub(r'[^\s]+\.net[^\s]*', '', cleaned_body)  # Remove .net links
-        cleaned_body = re.sub(r'[^\s]+\.gov[^\s]*', '', cleaned_body)  # Remove .gov links
-        cleaned_body = re.sub(r'[^\s]+\.edu[^\s]*', '', cleaned_body)  # Remove .edu links
-        # Clean up extra whitespace from link removal
-        cleaned_body = re.sub(r'\s+', ' ', cleaned_body)
+        
+        # Remove only actual URLs and links, preserving newlines and table formatting
+        # Remove HTTP/HTTPS URLs (but preserve text that might look like URLs in tables)
+        cleaned_body = re.sub(r'https?://[^\s\n]+', '', cleaned_body)
+        
+        # Remove www links (but be more careful not to remove part numbers)
+        cleaned_body = re.sub(r'\bwww\.[^\s\n]+\.[^\s\n]+', '', cleaned_body)
+        
+        # Remove email addresses (but preserve text that might contain @ symbols)
+        cleaned_body = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '', cleaned_body)
+        
+        # Clean up multiple consecutive spaces but preserve newlines
+        cleaned_body = re.sub(r'[ ]{2,}', ' ', cleaned_body)
+        
+        # Preserve the original structure
         cleaned_body = cleaned_body.strip()
         print(f"    ✅ Email body cleaned, length: {len(cleaned_body)} chars")
+        print(f"    📊 Preserved newlines and table formatting")
+        print(f"    🔧 Enhanced table detection and formatting preservation")
         
         # Combine email body with image text
         combined_text = self._combine_text_and_images(cleaned_body, image_texts)
+        
+        # The email parser has already extracted individual table rows
+        # Let's combine them into a coherent table structure for the LLM
+        print("\n🔍 Combining extracted table rows into coherent structure...")
+        combined_table = self._combine_table_rows(combined_text)
+        print(f"    ✅ Combined table structure: {len(combined_table)} chars")
         
         # Filter 2: Extract quote-level information
         print("\n🔍 Filter 2: Quote-Level Information Extraction")
         quote_info = self._extract_quote_level_info(combined_text)
         
-        # Filter 3: Extract item metadata
-        print("\n🔍 Filter 3: Item Metadata Extraction")
-        items = self._extract_item_metadata(combined_text, quote_info)
+        # Filter 3: Extract item metadata (simplified)
+        print("\n🔍 Filter 3: Item Metadata Extraction (Simplified)")
+        items = self._extract_item_metadata(combined_table, quote_info)
         
         # Filter 4: Compile final result matrix
         print("\n🔍 Filter 4: Final Result Matrix Compilation")
@@ -195,15 +212,29 @@ If you do not get an image, do not return anything.
     def _extract_table_structure(self, text: str) -> str:
         """
         Extract and format table structure from text
+        Only process actual structured tables, not random text with spaces
         """
-        # Look for patterns that suggest table structure
         lines = text.split('\n')
         table_lines = []
         
+        # Look for actual table patterns, not just any text with spaces
         for line in lines:
-            # Check if line has multiple columns (separated by spaces, tabs, or |)
-            if re.search(r'\s{2,}|\t|\|', line.strip()):
-                table_lines.append(line.strip())
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Check if this looks like a real table row
+            # Must have multiple columns with consistent structure
+            if '|' in line and len(line.split('|')) >= 4:
+                # Pipe-separated table row
+                table_lines.append(line)
+            elif re.search(r'\s{3,}', line) and len(line) > 30:
+                # Space-separated table row - must be long enough and have enough columns
+                parts = re.split(r'\s{3,}', line)
+                if len(parts) >= 4:  # At least 4 columns for a real table
+                    # Check if first column looks like a row number
+                    if re.match(r'^\d+$', parts[0].strip()):
+                        table_lines.append(line)
         
         if table_lines:
             # Create ASCII representation
@@ -217,17 +248,209 @@ If you do not get an image, do not return anything.
     
     def _combine_text_and_images(self, email_body: str, image_texts: List[ImageTextResult]) -> str:
         """
-        Combine email body with extracted image text
+        Combine email body with extracted image text, preserving formatting
         """
         combined = email_body
         
         for img_text in image_texts:
-            # Insert image text at appropriate location
-            combined += f"\n\n[IMAGE: {img_text.content_id}]\n{img_text.text}\n"
+            # Insert image text with clear separators while preserving formatting
+            combined += f"\n\n{'='*50}\n[IMAGE: {img_text.content_id}]\n{'='*50}\n"
+            combined += img_text.text
             if img_text.table_structure:
-                combined += f"\n[TABLE_STRUCTURE]\n{img_text.table_structure}\n"
+                combined += f"\n\n[TABLE_STRUCTURE]\n{img_text.table_structure}"
+            combined += f"\n{'='*50}\n"
+        
+        # Enhance table detection in the combined text
+        combined = self._enhance_table_formatting(combined)
         
         return combined
+    
+    def _enhance_table_formatting(self, text: str) -> str:
+        """
+        Enhance table formatting to make it more readable for LLM parsing
+        Only process actual table data, not random text
+        """
+        lines = text.split('\n')
+        enhanced_lines = []
+        
+        for line in lines:
+            # Look for lines that might be table headers or data rows
+            if '|' in line and len(line.split('|')) >= 4:
+                # This looks like a table row with pipe separators
+                enhanced_lines.append(line)
+            elif re.search(r'\s{3,}', line) and len(line.strip()) > 30:
+                # This looks like a table row with space separators
+                # Only enhance if it looks like actual table data with proper structure
+                parts = re.split(r'\s{3,}', line.strip())
+                if len(parts) >= 4:  # At least 4 columns for a real table
+                    # Check if first column looks like a row number and second like a part number
+                    if (re.match(r'^\d+$', parts[0].strip()) and 
+                        re.match(r'^[A-Z0-9\-:]+$', parts[1].strip())):
+                        # Looks like table data with row number and part number
+                        enhanced_line = ' | '.join(parts)
+                        enhanced_lines.append(enhanced_line)
+                    else:
+                        enhanced_lines.append(line)
+                else:
+                    enhanced_lines.append(line)
+            else:
+                enhanced_lines.append(line)
+        
+        return '\n'.join(enhanced_lines)
+    
+    def _combine_table_rows(self, text: str) -> str:
+        """
+        Combine individual table rows extracted by the email parser into one coherent table
+        The email parser treats each row as a separate table, so we need to combine them
+        """
+        lines = text.split('\n')
+        table_rows = []
+        header_found = False
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Look for the table header
+            if ('Item | Part Number | Quantity | U/M | Description | Price | Lead Time | RFP #' in line or
+                'Item | Part Number | Quantity | U/M | Description' in line):
+                if not header_found:
+                    table_rows.append(line)
+                    table_rows.append('-' * 80)  # Add separator line
+                    header_found = True
+                break
+            
+            # Look for individual table rows that were extracted by the email parser
+            # These typically look like: "1 | AP1-19-111-T | 6 | EA | Panel - Filler, 1U, Color 111-T | AC252347-001"
+            if '|' in line and re.match(r'^\d+\s*\|', line):
+                # This looks like a table data row
+                table_rows.append(line)
+            elif re.match(r'^\d+\s+[A-Z0-9\-:]+', line):
+                # This looks like a space-separated table row
+                # Convert to pipe-separated format for consistency
+                parts = re.split(r'\s{3,}', line)
+                if len(parts) >= 4:
+                    formatted_line = ' | '.join(parts)
+                    table_rows.append(formatted_line)
+            # Also look for the individual table rows that the email parser extracted
+            # These are marked with [TABLE X] and contain the actual data
+            elif line.startswith('[TABLE') and ']' in line:
+                # This is a table marker, skip it
+                continue
+            elif re.match(r'^\d+\s+\|', line):
+                # This looks like a table data row starting with a number and pipe
+                table_rows.append(line)
+            elif re.match(r'^\d+\s+[A-Z0-9\-:]+', line) and len(line) > 15:
+                # This looks like a space-separated table row with enough content
+                # Convert to pipe-separated format for consistency
+                parts = re.split(r'\s{3,}', line)
+                if len(parts) >= 3:  # At least 3 columns
+                    formatted_line = ' | '.join(parts)
+                    table_rows.append(formatted_line)
+            # Also look for lines that start with numbers and contain part numbers
+            elif re.match(r'^\d+\s+[A-Z0-9\-:]+', line) and len(line) > 10:
+                # This looks like a space-separated table data row
+                # Convert to pipe-separated format for consistency
+                parts = re.split(r'\s{2,}', line)  # Use 2+ spaces as separator
+                if len(parts) >= 3:  # At least 3 columns
+                    formatted_line = ' | '.join(parts)
+                    table_rows.append(formatted_line)
+            # Also look for any line that contains a part number pattern
+            elif re.search(r'\b[A-Z0-9\-:]+\s+\d+\s+[A-Z]+\b', line):
+                # This looks like it contains part number, quantity, and unit
+                # Try to extract the structured data
+                if re.match(r'^\d+', line):
+                    # Line starts with a number, likely a table row
+                    table_rows.append(line)
+        
+        if table_rows:
+            print(f"    📊 Found {len(table_rows)} table rows to combine")
+            return '\n'.join(table_rows)
+        else:
+            print(f"    ⚠️  No table rows found, using original text")
+            return text
+    
+    def _extract_item_table(self, text: str) -> str:
+        """
+        Extract only the actual item table from the email text
+        Filters out non-table content and focuses on structured item data
+        """
+        lines = text.split('\n')
+        table_lines = []
+        in_table = False
+        table_started = False
+        consecutive_data_rows = 0
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Look for table header patterns - be more flexible
+            if (('Item' in line and 'Part Number' in line and 'Quantity' in line) or
+                ('Item | Part Number | Quantity' in line) or
+                (line.startswith('Item') and '|' in line and len(line.split('|')) >= 4) or
+                # Also look for the actual table header from the email
+                ('Item | Part Number | Quantity | U/M | Description | Price | Lead Time | RFP #' in line)):
+                in_table = True
+                table_started = True
+                consecutive_data_rows = 0
+                table_lines.append(line)
+                continue
+            
+            # If we're in a table, look for data rows
+            if in_table:
+                # Check if this looks like a table data row
+                if '|' in line and len(line.split('|')) >= 4:
+                    # Pipe-separated table row - must have at least 4 columns
+                    table_lines.append(line)
+                    consecutive_data_rows += 1
+                elif re.search(r'\s{3,}', line) and len(line) > 30:
+                    # Space-separated table row - must be long enough
+                    parts = re.split(r'\s{3,}', line)
+                    if len(parts) >= 4:  # At least 4 columns for a real table
+                        # Check if first column looks like a row number and second like a part number
+                        if (re.match(r'^\d+$', parts[0].strip()) and 
+                            re.match(r'^[A-Z0-9\-:]+$', parts[1].strip())):
+                            # Looks like table data with row number and part number
+                            table_lines.append(line)
+                            consecutive_data_rows += 1
+                        else:
+                            # Not a data row, might be end of table
+                            if consecutive_data_rows < 3:  # Need at least 3 consecutive data rows
+                                table_lines = []  # Reset if we don't have enough data
+                                in_table = False
+                            else:
+                                in_table = False
+                    else:
+                        # Not enough columns
+                        if consecutive_data_rows < 3:
+                            table_lines = []
+                            in_table = False
+                        else:
+                            in_table = False
+                elif line.startswith('---') or line.startswith('==='):
+                    # Table separator line
+                    table_lines.append(line)
+                elif consecutive_data_rows >= 3 and (not re.search(r'\s{2,}', line) and len(line) < 30):
+                    # Short line without multiple spaces - likely end of table
+                    # But only if we have enough data rows
+                    in_table = False
+                elif consecutive_data_rows >= 3:
+                    # Keep lines that look like they belong to the table
+                    table_lines.append(line)
+                else:
+                    # Not enough consecutive data rows, reset
+                    table_lines = []
+                    in_table = False
+        
+        if table_lines and consecutive_data_rows >= 3:
+            print(f"    📊 Found table with {consecutive_data_rows} data rows")
+            return '\n'.join(table_lines)
+        else:
+            print(f"    ⚠️  No valid table found, using original text")
+            return text
     
     def _extract_quote_level_info(self, text: str) -> QuoteLevelInfo:
         """
@@ -371,72 +594,53 @@ Remember: Return ONLY the JSON object, nothing else.
     
     def _extract_item_metadata(self, text: str, quote_info: QuoteLevelInfo) -> List[ItemMetadata]:
         """
-        Filter 3: Extract item metadata using LLM
+        Filter 3: Extract item metadata using LLM - Simplified version
+        Returns a clean JSON list of items with basic metadata
         """
-        # Extract item metadata using LLM
         prompt = f"""
-You are an inventory extraction expert. Extract ALL inventory items from this email.
-
-QUOTE CONTEXT:
-- Shipping Location: {quote_info.shipping_location or 'Not specified'}
-- Client Name: {quote_info.client_name or 'Not specified'}
-- Clauses: {', '.join(quote_info.clauses) if quote_info.clauses else 'None'}
+Extract ALL inventory items from this email text. This is critical - you must extract EVERY SINGLE item.
 
 Email text:
 {text[:25000]}...
 
-CRITICAL: Extract EVERY SINGLE inventory item from this email. Do not miss any items.
+IMPORTANT: This text contains table data with preserved formatting. Look for:
+- Structured tables with columns (Item, Part Number, Quantity, U/M, Description, etc.)
+- Data separated by | (pipes), spaces, or tabs
+- Rows of inventory items
+- Image content marked with [IMAGE:...] sections
+- Enhanced table formatting with pipe separators (|) for better readability
 
-IMPORTANT EXTRACTION RULES:
-- Extract ONLY actual inventory items from any structured data
-- IGNORE all conversational text, explanations, or narrative content
-- IGNORE all links, URLs, or web addresses
-- IGNORE all email signatures, greetings, or personal messages
-- IGNORE all marketing text, disclaimers, or legal language
-- Focus ONLY on items that have: part_number, quantity, and description
-- Each extracted item must represent a real product/part that can be ordered
-
-Look carefully through ALL content including:
-1. Any structured data - extract items from organized lists
-2. Bullet points or lists - capture all items
-3. Any tabular information - look for organized item data
-4. Image content (marked with [IMAGE:...]) - extract all visible items
+CRITICAL REQUIREMENTS:
+1. Extract EVERY SINGLE inventory item - do not miss any
+2. Look for ALL rows in the table that contain part numbers
+3. Process the entire table completely
+4. Do not stop after a few items - continue until you've processed everything
 
 Each item should have:
-- part_number: The part number from the data
-- quantity: The quantity specified (default to 1 if not specified)
-- description: The description of the item
-- unit: Unit of measure if specified (default to "EA")
+- part_number: The part number from the table
+- quantity: The quantity (default to 1 if not specified)
+- description: The item description
+- unit: Unit of measure (default to "EA")
 - price: Price if mentioned
 - lead_time: Lead time if mentioned
 - rfp_number: RFP number if mentioned
 
-IMPORTANT: 
-- Return ONLY a valid JSON array
-- Include ONLY actual inventory items
-- Process ALL content completely
-- Do not skip any items
-- The response must be parseable JSON
-- Use the EXACT part numbers from the data
-- Do NOT include any example data from this prompt - only extract from the actual email content
-- Do NOT include conversational text, links, or non-inventory content
-
-Expected structure:
+Return ONLY a valid JSON array like this:
 [
     {{
-        "part_number": "actual part number from email",
-        "quantity": "actual quantity from email",
-        "description": "actual description from email",
-        "unit": "actual unit from email",
+        "part_number": "actual part number",
+        "quantity": "actual quantity",
+        "description": "actual description",
+        "unit": "actual unit",
         "price": "price if mentioned",
         "lead_time": "lead time if mentioned",
         "rfp_number": "rfp number if mentioned"
     }}
 ]
 
-If no items found, return empty array: []
+If no items found, return: []
 
-Remember: Extract EVERY SINGLE inventory item - completeness is critical!
+REMEMBER: Extract EVERY SINGLE item - completeness is critical!
 """
 
         try:
@@ -445,7 +649,14 @@ Remember: Extract EVERY SINGLE inventory item - completeness is critical!
                 json={
                     "model": self.model_name,
                     "messages": [{"role": "user", "content": prompt}],
-                    "stream": False
+                    "stream": False,
+                    # Encourage longer, more complete outputs
+                    "options": {
+                        "num_predict": 4096,
+                        "num_ctx": 8192,
+                        "temperature": 0.2,
+                        "top_p": 0.9
+                    }
                 }
             )
             response.raise_for_status()
@@ -459,16 +670,22 @@ Remember: Extract EVERY SINGLE inventory item - completeness is critical!
                 print(f"    🔍 Raw response: {response.text[:300]}...")
                 raise ValueError(f"Invalid API response format: {json_err}")
             
-            # Clean the response - extract JSON array from multi-line responses
+            # Debug: show raw model output to diagnose truncation or partial arrays
+            try:
+                preview = content[:600].replace('\n', '\n')
+                print(f"    🔍 Raw items LLM response ({len(content)} chars): {preview}...")
+            except Exception:
+                pass
+
+            # Extract JSON array from response
             json_str = None
             
-            # Strategy 1: Look for JSON array between backticks
+            # Look for JSON array between backticks
             code_block_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
             if code_block_match:
                 json_str = code_block_match.group(1).strip()
-                print(f"    🔍 Found JSON array in code block: {json_str[:100]}...")
             
-            # Strategy 2: Look for JSON array with balanced brackets
+            # Look for JSON array with balanced brackets
             if not json_str:
                 start_bracket = content.find('[')
                 if start_bracket != -1:
@@ -485,14 +702,6 @@ Remember: Extract EVERY SINGLE inventory item - completeness is critical!
                     
                     if bracket_count == 0:  # Balanced brackets
                         json_str = content[start_bracket:end_pos]
-                        print(f"    🔍 Found JSON array with balanced brackets: {json_str[:100]}...")
-            
-            # Strategy 3: Simple regex fallback for basic JSON array
-            if not json_str:
-                simple_match = re.search(r'\[.*\]', content, re.DOTALL)
-                if simple_match:
-                    json_str = simple_match.group(0)
-                    print(f"    🔍 Found JSON array with simple regex: {json_str[:100]}...")
             
             if json_str:
                 try:
@@ -527,43 +736,7 @@ Remember: Extract EVERY SINGLE inventory item - completeness is critical!
                     
                 except json.JSONDecodeError as json_err:
                     print(f"    ❌ JSON parsing failed: {json_err}")
-                    print(f"    🔍 Attempted to parse: {json_str}")
-                    # Try to clean up common issues
-                    cleaned_json = self._clean_json_string(json_str)
-                    if cleaned_json:
-                        try:
-                            items_data = json.loads(cleaned_json)
-                            print(f"    ✅ Successfully cleaned and parsed JSON")
-                            
-                            # Convert to ItemMetadata objects
-                            items = []
-                            for i, item_data in enumerate(items_data):
-                                # Handle missing or None values with proper defaults
-                                quantity = item_data.get('quantity')
-                                if quantity is None or quantity == '':
-                                    quantity = 1  # Default to 1 if no quantity specified
-                                else:
-                                    try:
-                                        quantity = int(quantity)
-                                    except (ValueError, TypeError):
-                                        quantity = 1  # Default to 1 if conversion fails
-                                
-                                items.append(ItemMetadata(
-                                    part_number=item_data.get('part_number', ''),
-                                    quantity=quantity,
-                                    description=item_data.get('description', ''),
-                                    unit=item_data.get('unit', 'EA'),
-                                    price=item_data.get('price'),
-                                    lead_time=item_data.get('lead_time'),
-                                    rfp_number=item_data.get('rfp_number'),
-                                    item_number=str(i + 1)
-                                ))
-                            
-                            return items
-                        except json.JSONDecodeError:
-                            raise ValueError(f"Invalid JSON format after cleanup: {json_err}")
-                    else:
-                        raise ValueError(f"Invalid JSON format: {json_err}")
+                    raise ValueError(f"Invalid JSON format: {json_err}")
             else:
                 print(f"  ❌ No JSON array found in LLM response: {content[:200]}...")
                 raise ValueError("No JSON array found in response")
@@ -595,7 +768,7 @@ def main():
     pipeline = EmailDiffusionPipeline()
     
     # Test with a sample email
-    email_path = "../data/email_batch/LONG QUOTE EXAMPLE.eml"
+    email_path = "data/email_batch/LONG QUOTE EXAMPLE.eml"
     
     try:
         result = pipeline.process_email(email_path)
