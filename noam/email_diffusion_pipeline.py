@@ -306,10 +306,19 @@ If you do not get an image, do not return anything.
         lines = text.split('\n')
         table_rows = []
         header_found = False
+        in_table = False
         
         for line in lines:
             line = line.strip()
             if not line:
+                continue
+            
+            # Look for table markers
+            if line.startswith('[TABLE') and ']' in line:
+                in_table = True
+                continue
+            elif line.startswith('[/TABLE]'):
+                in_table = False
                 continue
             
             # Look for the table header
@@ -319,50 +328,32 @@ If you do not get an image, do not return anything.
                     table_rows.append(line)
                     table_rows.append('-' * 80)  # Add separator line
                     header_found = True
-                break
-            
-            # Look for individual table rows that were extracted by the email parser
-            # These typically look like: "1 | AP1-19-111-T | 6 | EA | Panel - Filler, 1U, Color 111-T | AC252347-001"
-            if '|' in line and re.match(r'^\d+\s*\|', line):
-                # This looks like a table data row
-                table_rows.append(line)
-            elif re.match(r'^\d+\s+[A-Z0-9\-:]+', line):
-                # This looks like a space-separated table row
-                # Convert to pipe-separated format for consistency
-                parts = re.split(r'\s{3,}', line)
-                if len(parts) >= 4:
-                    formatted_line = ' | '.join(parts)
-                    table_rows.append(formatted_line)
-            # Also look for the individual table rows that the email parser extracted
-            # These are marked with [TABLE X] and contain the actual data
-            elif line.startswith('[TABLE') and ']' in line:
-                # This is a table marker, skip it
                 continue
-            elif re.match(r'^\d+\s+\|', line):
-                # This looks like a table data row starting with a number and pipe
-                table_rows.append(line)
-            elif re.match(r'^\d+\s+[A-Z0-9\-:]+', line) and len(line) > 15:
-                # This looks like a space-separated table row with enough content
-                # Convert to pipe-separated format for consistency
-                parts = re.split(r'\s{3,}', line)
-                if len(parts) >= 3:  # At least 3 columns
-                    formatted_line = ' | '.join(parts)
-                    table_rows.append(formatted_line)
-            # Also look for lines that start with numbers and contain part numbers
-            elif re.match(r'^\d+\s+[A-Z0-9\-:]+', line) and len(line) > 10:
-                # This looks like a space-separated table data row
-                # Convert to pipe-separated format for consistency
-                parts = re.split(r'\s{2,}', line)  # Use 2+ spaces as separator
-                if len(parts) >= 3:  # At least 3 columns
-                    formatted_line = ' | '.join(parts)
-                    table_rows.append(formatted_line)
-            # Also look for any line that contains a part number pattern
-            elif re.search(r'\b[A-Z0-9\-:]+\s+\d+\s+[A-Z]+\b', line):
-                # This looks like it contains part number, quantity, and unit
-                # Try to extract the structured data
-                if re.match(r'^\d+', line):
-                    # Line starts with a number, likely a table row
+            
+            # If we're inside a table, look for data rows
+            if in_table:
+                # Look for pipe-separated data rows (the clean format from email parser)
+                if '|' in line and len(line.split('|')) >= 4:
+                    # This looks like a table data row
                     table_rows.append(line)
+                # Look for space-separated data rows
+                elif re.match(r'^\d+\s+[A-Z0-9\-:]+', line) and len(line) > 15:
+                    # This looks like a space-separated table row
+                    parts = re.split(r'\s{3,}', line)
+                    if len(parts) >= 4:
+                        formatted_line = ' | '.join(parts)
+                        table_rows.append(formatted_line)
+            else:
+                # Look for standalone table rows outside of [TABLE] blocks
+                if '|' in line and re.match(r'^\d+\s*\|', line):
+                    # This looks like a table data row
+                    table_rows.append(line)
+                elif re.match(r'^\d+\s+[A-Z0-9\-:]+', line) and len(line) > 15:
+                    # This looks like a space-separated table row
+                    parts = re.split(r'\s{3,}', line)
+                    if len(parts) >= 4:
+                        formatted_line = ' | '.join(parts)
+                        table_rows.append(formatted_line)
         
         if table_rows:
             print(f"    📊 Found {len(table_rows)} table rows to combine")
@@ -464,7 +455,7 @@ You are an email analysis expert. Extract the following information from this em
 3. CLAUSES: Any alphanumeric codes that represent terms/conditions (format: Letter + 3 digits, e.g., C103, E223, H202)
 
 Email text:
-{text[:2000]}...
+{text[:10000]}...
 
 IMPORTANT: Return ONLY a valid JSON object. Do not include any other text, explanations, or formatting.
 The response must be parseable JSON with this exact structure:
