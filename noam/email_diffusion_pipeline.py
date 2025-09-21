@@ -3,6 +3,13 @@ Email Diffusion Pipeline - Multi-Filter Processing Flow
 
 This pipeline processes emails through multiple filters, each augmenting the data
 with specific information, similar to how diffusion models work.
+
+Current filters:
+1. Image-to-Text Conversion
+2. Quote-Level Information Extraction  
+3. Final Result Matrix Compilation
+
+Note: Item Metadata Extraction filter has been removed to start from scratch.
 """
 
 import re
@@ -11,7 +18,7 @@ import json
 import requests
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
-from email_parser import parse_email
+from .email_parser import parse_email
 
 
 @dataclass
@@ -55,6 +62,13 @@ class ProcessedQuote:
 class EmailDiffusionPipeline:
     """
     Diffusion-style email processing pipeline with multiple filters
+    
+    Current pipeline:
+    1. Image-to-Text Conversion
+    2. Quote-Level Information Extraction
+    3. Final Result Matrix Compilation
+    
+    Item Metadata Extraction has been removed to start from scratch.
     """
     
     def __init__(self, model_name: str = "llama4:scout", api_url: str = "http://localhost:11434"):
@@ -119,13 +133,9 @@ class EmailDiffusionPipeline:
         print("\n🔍 Filter 2: Quote-Level Information Extraction")
         quote_info = self._extract_quote_level_info(combined_text)
         
-        # Filter 3: Extract item metadata (simplified)
-        print("\n🔍 Filter 3: Item Metadata Extraction (Simplified)")
-        items = self._extract_item_metadata(combined_table, quote_info)
-        
-        # Filter 4: Compile final result matrix
-        print("\n🔍 Filter 4: Final Result Matrix Compilation")
-        final_result = self._compile_result_matrix(quote_info, items, combined_text, image_texts)
+        # Filter 3: Compile final result matrix (skipping item metadata extraction)
+        print("\n🔍 Filter 3: Final Result Matrix Compilation")
+        final_result = self._compile_result_matrix(quote_info, [], combined_text, image_texts)
         
         print("\n✅ Pipeline Complete!")
         return final_result
@@ -583,56 +593,52 @@ Remember: Return ONLY the JSON object, nothing else.
         
         return cleaned
     
-    def _extract_item_metadata(self, text: str, quote_info: QuoteLevelInfo) -> List[ItemMetadata]:
+    def _extract_item_metadata_improved(self, combined_text: str, quote_info: QuoteLevelInfo) -> List[ItemMetadata]:
         """
-        Filter 3: Extract item metadata using LLM - Simplified version
-        Returns a clean JSON list of items with basic metadata
+        Filter 3: Extract item metadata using improved LLM approach
+        Handles both structured tables and conversational requests
         """
-        prompt = f"""
-Extract ALL inventory items from this email text. This is critical - you must extract EVERY SINGLE item.
+        prompt = f"""You are an expert at extracting inventory items from emails. Extract ALL inventory/parts items that have a part number, description, and quantity.
 
-Email text:
-{text[:25000]}...
+The email may contain items in different formats:
+1. Structured tables (with headers like "Item | Part Number | Quantity | U/M | Description")
+2. Conversational requests (like "I need part ABC123, qty 5")
+3. Mixed formats (some items in tables, others in text)
+4. Items described in images (transcribed text from images)
 
-IMPORTANT: This text contains table data with preserved formatting. Look for:
-- Structured tables with columns (Item, Part Number, Quantity, U/M, Description, etc.)
-- Data separated by | (pipes), spaces, or tabs
-- Rows of inventory items
-- Image content marked with [IMAGE:...] sections
-- Enhanced table formatting with pipe separators (|) for better readability
+Email content:
+{combined_text[:25000]}
 
-CRITICAL REQUIREMENTS:
-1. Extract EVERY SINGLE inventory item - do not miss any
-2. Look for ALL rows in the table that contain part numbers
-3. Process the entire table completely
-4. Do not stop after a few items - continue until you've processed everything
+Extract ALL inventory items that have ALL THREE required fields:
+- Part number/identifier (like EZ471SA, AP1-19-111-T, etc.)
+- Description (what the item is)
+- Quantity (how many are needed)
 
-Each item should have:
-- part_number: The part number from the table
-- quantity: The quantity (default to 1 if not specified)
-- description: The item description
-- unit: Unit of measure (default to "EA")
-- price: Price if mentioned
-- lead_time: Lead time if mentioned
-- rfp_number: RFP number if mentioned
+DO NOT extract:
+- Clause codes (like C103, E223, H202, Q011S, etc.)
+- Terms and conditions
+- Contact information
+- Shipping addresses
+- Items missing part number, description, or quantity
 
-Return ONLY a valid JSON array like this:
+Return a JSON array of items with this structure:
 [
-    {{
-        "part_number": "actual part number",
-        "quantity": "actual quantity",
-        "description": "actual description",
-        "unit": "actual unit",
-        "price": "price if mentioned",
-        "lead_time": "lead time if mentioned",
-        "rfp_number": "rfp number if mentioned"
-    }}
+  {{
+    "part_number": "ABC123",
+    "quantity": 5,
+    "description": "Item description"
+  }}
 ]
 
-If no items found, return: []
-
-REMEMBER: Extract EVERY SINGLE item - completeness is critical!
-"""
+CRITICAL REQUIREMENTS:
+- Extract EVERY single item from tables - do not skip any rows
+- For large tables: Process each row systematically, one by one
+- If you see a table with 60+ rows, extract ALL 60+ items
+- Each item MUST have part_number, description, and quantity
+- If quantity not specified, use 1
+- Include items from both text and image transcriptions
+- Be extremely thorough - missing items is unacceptable
+- Return ONLY the JSON array, no other text"""
 
         try:
             response = requests.post(
@@ -640,108 +646,72 @@ REMEMBER: Extract EVERY SINGLE item - completeness is critical!
                 json={
                     "model": self.model_name,
                     "messages": [{"role": "user", "content": prompt}],
-                    "stream": False,
-                    # Encourage longer, more complete outputs
-                    "options": {
-                        "num_predict": 4096,
-                        "num_ctx": 8192,
-                        "temperature": 0.2,
-                        "top_p": 0.9
-                    }
+                    "stream": False
                 }
             )
             response.raise_for_status()
             
-            # Parse JSON response
-            try:
-                result = response.json()
-                content = result['message']['content']
-            except json.JSONDecodeError as json_err:
-                print(f"    ❌ API response not valid JSON: {json_err}")
-                print(f"    🔍 Raw response: {response.text[:300]}...")
-                raise ValueError(f"Invalid API response format: {json_err}")
+            result = response.json()
+            content = result['message']['content']
             
-            # Debug: show raw model output to diagnose truncation or partial arrays
-            try:
-                preview = content[:600].replace('\n', '\n')
-                print(f"    🔍 Raw items LLM response ({len(content)} chars): {preview}...")
-            except Exception:
-                pass
-
             # Extract JSON array from response
-            json_str = None
-            
-            # Look for JSON array between backticks
-            code_block_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
-            if code_block_match:
-                json_str = code_block_match.group(1).strip()
-            
-            # Look for JSON array with balanced brackets
-            if not json_str:
-                start_bracket = content.find('[')
-                if start_bracket != -1:
-                    bracket_count = 0
-                    end_pos = start_bracket
-                    for i, char in enumerate(content[start_bracket:], start_bracket):
-                        if char == '[':
-                            bracket_count += 1
-                        elif char == ']':
-                            bracket_count -= 1
-                            if bracket_count == 0:
-                                end_pos = i + 1
-                                break
-                    
-                    if bracket_count == 0:  # Balanced brackets
-                        json_str = content[start_bracket:end_pos]
+            json_str = self._extract_json_array_improved(content)
             
             if json_str:
-                try:
-                    items_data = json.loads(json_str)
-                    print(f"    ✅ Successfully parsed JSON array with {len(items_data)} items")
-                    
-                    # Convert to ItemMetadata objects
-                    items = []
-                    for i, item_data in enumerate(items_data):
-                        # Handle missing or None values with proper defaults
-                        quantity = item_data.get('quantity')
-                        if quantity is None or quantity == '':
-                            quantity = 1  # Default to 1 if no quantity specified
-                        else:
-                            try:
-                                quantity = int(quantity)
-                            except (ValueError, TypeError):
-                                quantity = 1  # Default to 1 if conversion fails
-                        
-                        items.append(ItemMetadata(
-                            part_number=item_data.get('part_number', ''),
-                            quantity=quantity,
-                            description=item_data.get('description', ''),
-                            unit=item_data.get('unit', 'EA'),
-                            price=item_data.get('price'),
-                            lead_time=item_data.get('lead_time'),
-                            rfp_number=item_data.get('rfp_number'),
-                            item_number=str(i + 1)
-                        ))
-                    
-                    return items
-                    
-                except json.JSONDecodeError as json_err:
-                    print(f"    ❌ JSON parsing failed: {json_err}")
-                    raise ValueError(f"Invalid JSON format: {json_err}")
+                items_data = json.loads(json_str)
+                print(f"    ✅ Extracted {len(items_data)} items")
+                
+                # Convert to ItemMetadata objects
+                items = []
+                for i, item_data in enumerate(items_data):
+                    items.append(ItemMetadata(
+                        part_number=str(item_data.get('part_number', '')),
+                        quantity=int(item_data.get('quantity', 1)) if item_data.get('quantity') else 1,
+                        description=str(item_data.get('description', '')),
+                        item_number=str(i + 1)
+                    ))
+                
+                return items
             else:
-                print(f"  ❌ No JSON array found in LLM response: {content[:200]}...")
-                raise ValueError("No JSON array found in response")
+                print(f"    ⚠️  No valid JSON found in response")
+                return []
             
         except Exception as e:
-            print(f"  ❌ LLM item extraction failed: {e}")
-            raise RuntimeError(f"Item metadata extraction failed: {e}")
+            print(f"    ❌ Item extraction failed: {e}")
+            return []
+    
+    def _extract_json_array_improved(self, content: str) -> Optional[str]:
+        """Extract JSON array from LLM response with improved parsing"""
+        # Look for JSON array between backticks
+        code_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
+        if code_match:
+            return code_match.group(1).strip()
+        
+        # Look for JSON array with balanced brackets
+        start_bracket = content.find('[')
+        if start_bracket != -1:
+            bracket_count = 0
+            for i, char in enumerate(content[start_bracket:], start_bracket):
+                if char == '[':
+                    bracket_count += 1
+                elif char == ']':
+                    bracket_count -= 1
+                    if bracket_count == 0:
+                        return content[start_bracket:i + 1]
+        
+        # Look for simple array pattern
+        simple_match = re.search(r'\[.*?\]', content, re.DOTALL)
+        if simple_match:
+            return simple_match.group(0)
+        
+        return None
     
     def _compile_result_matrix(self, quote_info: QuoteLevelInfo, items: List[ItemMetadata], 
                              raw_text: str, image_texts: List[ImageTextResult]) -> ProcessedQuote:
         """
-        Filter 4: Compile final result matrix
+        Filter 3: Compile final result matrix (Item metadata extraction removed)
         """
-        print(f"  📊 Compiling results: {len(items)} items")
+        print(f"  📊 Compiling results: {len(items)} items (item extraction skipped)")
         print(f"  📍 Shipping: {quote_info.shipping_location}")
         print(f"  👤 Client: {quote_info.client_name}")
         print(f"  📋 Clauses: {len(quote_info.clauses)} found")
@@ -773,9 +743,7 @@ def main():
         print(f"   Client Name: {result.quote_info.client_name}")
         print(f"   Clauses: {', '.join(result.quote_info.clauses)}")
         
-        print(f"\n🛍️  Inventory Items ({len(result.items)}):")
-        for i, item in enumerate(result.items, 1):
-            print(f"   {i:2d}. {item.part_number:15s} | Qty: {item.quantity:3d} | {item.description}")
+        print(f"\n🛍️  Inventory Items: {len(result.items)} (item extraction removed)")
         
         print(f"\n📷 Images Processed: {len(result.image_texts)}")
         for img in result.image_texts:
@@ -788,20 +756,9 @@ def main():
                 "client_name": result.quote_info.client_name,
                 "clauses": result.quote_info.clauses
             },
-            "items": [
-                {
-                    "item_number": item.item_number,
-                    "part_number": item.part_number,
-                    "quantity": item.quantity,
-                    "unit": item.unit,
-                    "description": item.description,
-                    "price": item.price,
-                    "lead_time": item.lead_time,
-                    "rfp_number": item.rfp_number
-                }
-                for item in result.items
-            ],
-            "images_processed": len(result.image_texts)
+            "items": [],
+            "images_processed": len(result.image_texts),
+            "note": "Filter 3 (Item Metadata Extraction) removed - starting from scratch"
         }
         
         with open("diffusion_results.json", "w") as f:
